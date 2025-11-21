@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="h-full">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>拼图大师 Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3B82F6',
+                        secondary: '#10B981',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+
+        .dark ::-webkit-scrollbar-thumb {
+            background: #475569;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+
+        .dark ::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+        }
+
+        /* Range Input Customization */
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: #3B82F6;
+            cursor: pointer;
+            margin-top: -4px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+        }
+
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 8px;
+            cursor: pointer;
+            background: transparent;
+            border-radius: 4px;
+        }
+
+        /* Grid Cell Styles */
+        .grid-cell {
+            position: relative;
+            overflow: hidden;
+            background-color: #f3f4f6;
+            cursor: grab;
+        }
+
+        .dark .grid-cell {
+            background-color: #1f2937;
+        }
+
+        .grid-cell:active {
+            cursor: grabbing;
+        }
+
+        .grid-cell img {
+            position: absolute;
+            /* transform-origin: center center; */
+            /* Managed by JS */
+            will-change: transform;
+            user-select: none;
+            pointer-events: none;
+            /* Events handled by parent div */
+        }
+
+        /* Active Ratio Button */
+        .ratio-btn.active {
+            background-color: #eff6ff;
+            border-color: #3b82f6;
+            color: #2563eb;
+        }
+
+        .dark .ratio-btn.active {
+            background-color: rgba(59, 130, 246, 0.2);
+            color: #60a5fa;
+        }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body
+    class="h-full bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-200 flex overflow-hidden font-sans">
+
+    <!-- Sidebar -->
+    <aside
+        class="w-80 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col shadow-lg z-10">
+        <div class="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+            <h1 class="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-500 to-teal-400">拼图大师
+                Pro</h1>
+            <button id="themeToggle"
+                class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-600 dark:text-gray-300">
+                <!-- Sun Icon -->
+                <svg id="sunIcon" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z">
+                    </path>
+                </svg>
+                <!-- Moon Icon -->
+                <svg id="moonIcon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M20.354 24.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z">
+                    </path>
+                </svg>
+            </button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-6 space-y-8">
+            <!-- Upload Section -->
+            <section>
+                <h2 class="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">图片上传
+                </h2>
+                <div id="dropZone"
+                    class="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-6 text-center hover:border-blue-500 dark:hover:border-blue-400 transition-colors cursor-pointer bg-gray-50 dark:bg-gray-700/50">
+                    <input type="file" id="fileInput" multiple accept="image/*" class="hidden">
+                    <svg class="w-10 h-10 mx-auto text-gray-400 mb-3" fill="none" stroke="currentColor"
+                        viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z">
+                        </path>
+                    </svg>
+                    <p class="text-sm text-gray-600 dark:text-gray-300">点击或拖拽上传图片</p>
+                    <p class="text-xs text-gray-400 mt-1">支持 3-12 张图片</p>
+                </div>
+                <div id="fileList" class="mt-4 grid grid-cols-4 gap-2"></div>
+            </section>
+
+            <!-- Layout Settings -->
+            <section>
+                <h2 class="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">画布比例
+                </h2>
+                <div class="grid grid-cols-3 gap-2 mb-3">
+                    <button
+                        class="ratio-btn active px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors bg-blue-50 dark:bg-blue-900/30 border-blue-500 text-blue-600 dark:text-blue-400"
+                        data-ratio="1:1">1:1</button>
+                    <button
+                        class="ratio-btn px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                        data-ratio="4:3">4:3</button>
+                    <button
+                        class="ratio-btn px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                        data-ratio="16:9">16:9</button>
+                    <button
+                        class="ratio-btn px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                        data-ratio="3:4">3:4</button>
+                    <button
+                        class="ratio-btn px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                        data-ratio="9:16">9:16</button>
+                    <button
+                        class="ratio-btn px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                        id="customRatioBtn">自定义</button>
+                </div>
+                <div id="customRatioInput" class="hidden flex items-center space-x-2">
+                    <input type="number" id="ratioW" placeholder="W"
+                        class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-transparent text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                    <span class="text-gray-400">:</span>
+                    <input type="number" id="ratioH" placeholder="H"
+                        class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-transparent text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                </div>
+            </section>
+
+            <!-- Border Settings -->
+            <section>
+                <h2 class="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">边框设置
+                </h2>
+                <div class="space-y-4">
+                    <div>
+                        <label class="flex justify-between text-sm text-gray-600 dark:text-gray-300 mb-1">
+                            <span>粗细</span>
+                            <span id="borderWidthVal">1px</span>
+                        </label>
+                        <input type="range" id="borderWidth" min="0" max="20" value="1"
+                            class="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                    </div>
+                    <div>
+                        <label class="flex justify-between text-sm text-gray-600 dark:text-gray-300 mb-1">
+                            <span>颜色</span>
+                            <span id="borderColorVal" class="uppercase">#000000</span>
+                        </label>
+                        <div class="flex items-center space-x-2">
+                            <input type="color" id="borderColor" value="#000000"
+                                class="w-10 h-10 rounded cursor-pointer border-0 p-0">
+                            <input type="text" id="borderColorText" value="#000000"
+                                class="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-transparent text-sm focus:ring-2 focus:ring-blue-500 outline-none uppercase">
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <div class="p-6 border-t border-gray-200 dark:border-gray-700">
+            <button id="downloadBtn"
+                class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-xl shadow-lg shadow-blue-500/30 transition-all transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                </svg>
+                <span>下载高清拼图</span>
+            </button>
+        </div>
+    </aside>
+
+    <!-- Main Canvas Area -->
+    <main class="flex-1 bg-gray-100 dark:bg-gray-900/50 relative flex items-center justify-center p-8 overflow-hidden">
+        <!-- Canvas Container -->
+        <div id="canvasContainer" class="relative shadow-2xl transition-all duration-300 bg-white"
+            style="width: 800px; height: 800px;">
+            <!-- Grid will be injected here -->
+            <div id="gridContainer" class="w-full h-full grid gap-0 overflow-hidden">
+                <!-- Placeholder -->
+                <div
+                    class="col-span-full row-span-full flex flex-col items-center justify-center text-gray-400 bg-gray-50 dark:bg-gray-800">
+                    <svg class="w-16 h-16 mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z">
+                        </path>
+                    </svg>
+                    <span class="text-lg font-medium">请上传图片开始拼图</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Zoom/Pan Hint -->
+        <div class="absolute bottom-6 left-1/2 transform -translate-x-1/2 bg-black/70 text-white px-4 py-2 rounded-full text-sm backdrop-blur-sm pointer-events-none opacity-0 transition-opacity duration-300"
+            id="interactionHint">
+            拖拽移动图片 • 滚轮缩放
+        </div>
+    </main>
+
+    <script>
+        /**
+         * Puzzle Master Pro Logic
+         */
+
+        // State
+        const state = {
+            images: [], // Array of { id, src, x, y, scale }
+            ratio: 1, // width / height
+            borderWidth: 1,
+            borderColor: '#000000',
+            theme: 'light'
+        };
+
+        // DOM Elements
+        const elements = {
+            dropZone: document.getElementById('dropZone'),
+            fileInput: document.getElementById('fileInput'),
+            fileList: document.getElementById('fileList'),
+            canvasContainer: document.getElementById('canvasContainer'),
+            gridContainer: document.getElementById('gridContainer'),
+            themeToggle: document.getElementById('themeToggle'),
+            borderWidth: document.getElementById('borderWidth'),
+            borderWidthVal: document.getElementById('borderWidthVal'),
+            borderColor: document.getElementById('borderColor'),
+            borderColorText: document.getElementById('borderColorText'),
+            borderColorVal: document.getElementById('borderColorVal'),
+            ratioBtns: document.querySelectorAll('.ratio-btn'),
+            customRatioBtn: document.getElementById('customRatioBtn'),
+            customRatioInput: document.getElementById('customRatioInput'),
+            ratioW: document.getElementById('ratioW'),
+            ratioH: document.getElementById('ratioH'),
+            downloadBtn: document.getElementById('downloadBtn'),
+            interactionHint: document.getElementById('interactionHint')
+        };
+
+        // Initialization
+        function init() {
+            setupEventListeners();
+            loadTheme();
+            updateCanvasSize();
+        }
+
+        function setupEventListeners() {
+            // Theme
+            elements.themeToggle.addEventListener('click', toggleTheme);
+
+            // Upload
+            elements.dropZone.addEventListener('click', () => elements.fileInput.click());
+            elements.dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                elements.dropZone.classList.add('border-blue-500');
+            });
+            elements.dropZone.addEventListener('dragleave', () => {
+                elements.dropZone.classList.remove('border-blue-500');
+            });
+            elements.dropZone.addEventListener('drop', handleDrop);
+            elements.fileInput.addEventListener('change', handleFileSelect);
+
+            // Settings
+            elements.borderWidth.addEventListener('input', updateBorderWidth);
+            elements.borderColor.addEventListener('input', updateBorderColor);
+            elements.borderColorText.addEventListener('input', (e) => {
+                elements.borderColor.value = e.target.value;
+                updateBorderColor(e);
+            });
+
+            // Ratio
+            elements.ratioBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    if (btn.id === 'customRatioBtn') {
+                        elements.customRatioInput.classList.remove('hidden');
+                        elements.customRatioInput.classList.add('flex');
+                    } else {
+                        elements.customRatioInput.classList.add('hidden');
+                        elements.customRatioInput.classList.remove('flex');
+                        setRatio(btn.dataset.ratio);
+                    }
+                    updateActiveRatioBtn(btn);
+                });
+            });
+
+            elements.ratioW.addEventListener('input', updateCustomRatio);
+            elements.ratioH.addEventListener('input', updateCustomRatio);
+
+            // Download
+            elements.downloadBtn.addEventListener('click', exportImage);
+
+            // Window Resize
+            window.addEventListener('resize', updateCanvasSize);
+        }
+
+        // --- Theme Logic ---
+        function toggleTheme() {
+            document.documentElement.classList.toggle('dark');
+            state.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+            localStorage.setItem('theme', state.theme);
+            updateThemeIcons();
+        }
+
+        function loadTheme() {
+            const savedTheme = localStorage.getItem('theme');
+            if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                document.documentElement.classList.add('dark');
+                state.theme = 'dark';
+            } else {
+                document.documentElement.classList.remove('dark');
+                state.theme = 'light';
+            }
+            updateThemeIcons();
+        }
+
+        function updateThemeIcons() {
+            const sun = document.getElementById('sunIcon');
+            const moon = document.getElementById('moonIcon');
+            if (state.theme === 'dark') {
+                sun.classList.remove('hidden');
+                moon.classList.add('hidden');
+            } else {
+                sun.classList.add('hidden');
+                moon.classList.remove('hidden');
+            }
+        }
+
+        // --- Upload Logic ---
+        function handleDrop(e) {
+            e.preventDefault();
+            elements.dropZone.classList.remove('border-blue-500');
+            processFiles(e.dataTransfer.files);
+        }
+
+        function handleFileSelect(e) {
+            processFiles(e.target.files);
+        }
+
+        function processFiles(files) {
+            const validFiles = Array.from(files).filter(file => file.type.startsWith('image/'));
+            if (validFiles.length === 0) return;
+
+            // Limit total images to 12
+            const remainingSlots = 12 - state.images.length;
+            const filesToAdd = validFiles.slice(0, remainingSlots);
+
+            if (filesToAdd.length === 0 && state.images.length >= 12) {
+                alert('最多支持12张图片');
+                return;
+            }
+
+            filesToAdd.forEach(file => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        state.images.push({
+                            id: Date.now() + Math.random(),
+                            src: e.target.result,
+                            originalWidth: img.width,
+                            originalHeight: img.height,
+                            x: 0,
+                            y: 0,
+                            scale: 1
+                        });
+                        renderGrid();
+                        updateFileList();
+                    };
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function updateFileList() {
+            elements.fileList.innerHTML = '';
+            state.images.forEach((img, index) => {
+                const div = document.createElement('div');
+                div.className = 'relative aspect-square rounded-lg overflow-hidden group';
+                div.innerHTML = `
+                    <img src="${img.src}" class="w-full h-full object-cover">
+                    <button onclick="removeImage(${index})" class="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                `;
+                elements.fileList.appendChild(div);
+            });
+        }
+
+        window.removeImage = function (index) {
+            state.images.splice(index, 1);
+            renderGrid();
+            updateFileList();
+        };
+
+        // --- Grid Layout Logic ---
+        function renderGrid() {
+            const count = state.images.length;
+            const container = elements.gridContainer;
+            container.innerHTML = '';
+
+            if (count === 0) {
+                container.innerHTML = `
+                    <div class="col-span-full row-span-full flex flex-col items-center justify-center text-gray-400 bg-gray-50 dark:bg-gray-800">
+                        <svg class="w-16 h-16 mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                        <span class="text-lg font-medium">请上传图片开始拼图</span>
+                    </div>
+                `;
+                return;
+            }
+
+            // Apply Grid Template
+            const layout = getGridLayout(count);
+            container.style.gridTemplateColumns = `repeat(${layout.cols}, 1fr)`;
+            container.style.gridTemplateRows = `repeat(${layout.rows}, 1fr)`;
+
+            // Apply Gap (Border Width)
+            container.style.gap = `${state.borderWidth}px`;
+            container.style.backgroundColor = state.borderColor;
+            container.style.padding = `${state.borderWidth}px`;
+
+            state.images.forEach((imgData, index) => {
+                const cell = document.createElement('div');
+                cell.className = 'grid-cell bg-gray-200 overflow-hidden relative group';
+
+                // Apply span if defined in layout
+                if (layout.spans && layout.spans[index]) {
+                    const span = layout.spans[index];
+                    if (span.col) cell.style.gridColumn = `span ${span.col}`;
+                    if (span.row) cell.style.gridRow = `span ${span.row}`;
+                }
+
+                // Image Element
+                const img = document.createElement('img');
+                img.src = imgData.src;
+                img.className = 'absolute w-full h-full object-cover transition-transform duration-75 ease-out';
+                img.style.transform = `translate(${imgData.x}px, ${imgData.y}px) scale(${imgData.scale})`;
+
+                // Interaction Handlers
+                setupImageInteraction(cell, img, imgData);
+
+                cell.appendChild(img);
+                container.appendChild(cell);
+            });
+
+            // Show hint
+            elements.interactionHint.classList.remove('opacity-0');
+            setTimeout(() => elements.interactionHint.classList.add('opacity-0'), 3000);
+        }
+
+        function getGridLayout(n) {
+            // Define layouts for 3-12 images
+            // Returns { cols, rows, spans: [{col, row}, ...] }
+            // We use a 12-column grid for flexibility where possible, or specific grids
+
+            switch (n) {
+                case 3:
+                    return {
+                        cols: 2, rows: 2,
+                        spans: [
+                            { col: 1, row: 2 }, // Big Left
+                            { col: 1, row: 1 }, // Top Right
+                            { col: 1, row: 1 }  // Bottom Right
+                        ]
+                    };
+                case 4:
+                    return { cols: 2, rows: 2, spans: [] }; // 2x2
+                case 5:
+                    return {
+                        cols: 6, rows: 2,
+                        spans: [
+                            { col: 3, row: 1 }, { col: 3, row: 1 }, // Top 2
+                            { col: 2, row: 1 }, { col: 2, row: 1 }, { col: 2, row: 1 } // Bottom 3
+                        ]
+                    };
+                case 6:
+                    return { cols: 3, rows: 2, spans: [] }; // 3x2
+                case 7:
+                    return {
+                        cols: 12, rows: 3, // Complex layout
+                        spans: [
+                            { col: 8, row: 2 }, // Big Top Left (2/3 width, 2/3 height)
+                            { col: 4, row: 1 }, // Top Right 1
+                            { col: 4, row: 1 }, // Top Right 2
+                            { col: 3, row: 1 }, { col: 3, row: 1 }, { col: 3, row: 1 }, { col: 3, row: 1 } // Bottom 4
+                        ]
+                    };
+                    // Actually 7 is hard to make perfect with simple spans. Let's try simpler.
+                    // Row 1: 3, Row 2: 4.
+                    // 3 and 4 LCM is 12.
+                    // Row 1 items span 4. Row 2 items span 3.
+                    return {
+                        cols: 12, rows: 2,
+                        spans: [
+                            { col: 4, row: 1 }, { col: 4, row: 1 }, { col: 4, row: 1 },
+                            { col: 3, row: 1 }, { col: 3, row: 1 }, { col: 3, row: 1 }, { col: 3, row: 1 }
+                        ]
+                    };
+                case 8:
+                    return { cols: 4, rows: 2, spans: [] }; // 4x2
+                case 9:
+                    return { cols: 3, rows: 3, spans: [] }; // 3x3
+                case 10:
+                    // 2 rows: 5 and 5
+                    return { cols: 5, rows: 2, spans: [] };
+                case 11:
+                    // Row 1: 5, Row 2: 6? Or 4, 4, 3?
+                    // Let's do 3 rows: 4, 4, 3.
+                    // LCM 12.
+                    return {
+                        cols: 12, rows: 3,
+                        spans: [
+                            { col: 3, row: 1 }, { col: 3, row: 1 }, { col: 3, row: 1 }, { col: 3, row: 1 },
+                            { col: 3, row: 1 }, { col: 3, row: 1 }, { col: 3, row: 1 }, { col: 3, row: 1 },
+                            { col: 4, row: 1 }, { col: 4, row: 1 }, { col: 4, row: 1 }
+                        ]
+                    };
+                case 12:
+                    return { cols: 4, rows: 3, spans: [] }; // 4x3
+                default:
+                    // Fallback for < 3 (should be handled by upload limit but just in case)
+                    return { cols: n, rows: 1, spans: [] };
+            }
+        }
+
+        // --- Interaction Logic ---
+        function setupImageInteraction(cell, img, imgData) {
+            let isDragging = false;
+            let startX, startY;
+            let initialX, initialY;
+
+            cell.addEventListener('mousedown', startDrag);
+            cell.addEventListener('touchstart', startDrag, { passive: false });
+
+            function startDrag(e) {
+                e.preventDefault();
+                isDragging = true;
+                const clientX = e.type === 'mousedown' ? e.clientX : e.touches[0].clientX;
+                const clientY = e.type === 'mousedown' ? e.clientY : e.touches[0].clientY;
+                startX = clientX;
+                startY = clientY;
+                initialX = imgData.x;
+                initialY = imgData.y;
+
+                document.addEventListener('mousemove', onDrag);
+                document.addEventListener('mouseup', stopDrag);
+                document.addEventListener('touchmove', onDrag, { passive: false });
+                document.addEventListener('touchend', stopDrag);
+
+                cell.classList.add('cursor-grabbing');
+            }
+
+            function onDrag(e) {
+                if (!isDragging) return;
+                e.preventDefault();
+                const clientX = e.type === 'mousemove' ? e.clientX : e.touches[0].clientX;
+                const clientY = e.type === 'mousemove' ? e.clientY : e.touches[0].clientY;
+
+                const dx = clientX - startX;
+                const dy = clientY - startY;
+
+                imgData.x = initialX + dx;
+                imgData.y = initialY + dy;
+
+                img.style.transform = `translate(${imgData.x}px, ${imgData.y}px) scale(${imgData.scale})`;
+            }
+
+            function stopDrag() {
+                isDragging = false;
+                document.removeEventListener('mousemove', onDrag);
+                document.removeEventListener('mouseup', stopDrag);
+                document.removeEventListener('touchmove', onDrag);
+                document.removeEventListener('touchend', stopDrag);
+                cell.classList.remove('cursor-grabbing');
+            }
+
+            // Zoom
+            cell.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                const delta = e.deltaY > 0 ? 0.9 : 1.1;
+                let newScale = imgData.scale * delta;
+                newScale = Math.max(0.5, Math.min(newScale, 5)); // Clamp scale
+                imgData.scale = newScale;
+                img.style.transform = `translate(${imgData.x}px, ${imgData.y}px) scale(${imgData.scale})`;
+            }, { passive: false });
+        }
+
+        // --- Settings Logic ---
+        function updateBorderWidth(e) {
+            state.borderWidth = e.target.value;
+            elements.borderWidthVal.textContent = `${state.borderWidth}px`;
+            renderGrid(); // Re-render to apply gap
+        }
+
+        function updateBorderColor(e) {
+            state.borderColor = e.target.value;
+            elements.borderColorVal.textContent = state.borderColor;
+            elements.borderColorText.value = state.borderColor;
+            renderGrid();
+        }
+
+        function setRatio(ratioStr) {
+            const [w, h] = ratioStr.split(':').map(Number);
+            state.ratio = w / h;
+            updateCanvasSize();
+        }
+
+        function updateCustomRatio() {
+            const w = parseFloat(elements.ratioW.value) || 1;
+            const h = parseFloat(elements.ratioH.value) || 1;
+            state.ratio = w / h;
+            updateCanvasSize();
+        }
+
+        function updateActiveRatioBtn(activeBtn) {
+            elements.ratioBtns.forEach(btn => btn.classList.remove('active'));
+            activeBtn.classList.add('active');
+        }
+
+        function updateCanvasSize() {
+            const container = elements.canvasContainer.parentElement;
+            const maxWidth = container.clientWidth - 64; // Padding
+            const maxHeight = container.clientHeight - 64;
+
+            let w, h;
+
+            if (maxWidth / maxHeight > state.ratio) {
+                h = maxHeight;
+                w = h * state.ratio;
+            } else {
+                w = maxWidth;
+                h = w / state.ratio;
+            }
+
+            elements.canvasContainer.style.width = `${w}px`;
+            elements.canvasContainer.style.height = `${h}px`;
+        }
+
+        // --- Export Logic ---
+        async function exportImage() {
+            if (state.images.length === 0) return;
+
+            const btn = elements.downloadBtn;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<span>生成中...</span>';
+            btn.disabled = true;
+
+            try {
+                // 1. Create High-Res Canvas
+                const scale = 2; // 2x resolution
+                const domRect = elements.gridContainer.getBoundingClientRect();
+                const canvas = document.createElement('canvas');
+                canvas.width = domRect.width * scale;
+                canvas.height = domRect.height * scale;
+                const ctx = canvas.getContext('2d');
+
+                // 2. Draw Background (Border)
+                ctx.fillStyle = state.borderColor;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // 3. Draw Images
+                const cells = Array.from(elements.gridContainer.children);
+
+                // Load all images first to ensure they are ready (though they should be)
+                // We already have dataURLs in state.images, but we need Image objects.
+                // The DOM already has them.
+
+                for (let i = 0; i < cells.length; i++) {
+                    const cell = cells[i];
+                    const imgData = state.images[i];
+                    const imgEl = cell.querySelector('img');
+
+                    if (!imgEl) continue;
+
+                    // Get cell position relative to container
+                    const cellRect = cell.getBoundingClientRect();
+                    const x = (cellRect.left - domRect.left) * scale;
+                    const y = (cellRect.top - domRect.top) * scale;
+                    const w = cellRect.width * scale;
+                    const h = cellRect.height * scale;
+
+                    ctx.save();
+
+                    // Clip to cell area
+                    ctx.beginPath();
+                    ctx.rect(x, y, w, h);
+                    ctx.clip();
+
+                    // Calculate Image Drawing Params (Simulate object-fit: cover)
+                    const img = new Image();
+                    img.src = imgData.src;
+                    await new Promise(r => img.onload = r);
+
+                    const imgW = img.naturalWidth;
+                    const imgH = img.naturalHeight;
+                    const ratio = imgW / imgH;
+                    const cellRatio = w / h;
+
+                    let renderW, renderH;
+                    if (cellRatio > ratio) {
+                        renderW = w;
+                        renderH = w / ratio;
+                    } else {
+                        renderH = h;
+                        renderW = h * ratio;
+                    }
+
+                    const offsetX = (w - renderW) / 2;
+                    const offsetY = (h - renderH) / 2;
+
+                    // Apply User Transforms
+                    // Translate to center of cell
+                    ctx.translate(x + w / 2, y + h / 2);
+                    // Apply user pan (scaled)
+                    ctx.translate(imgData.x * scale, imgData.y * scale);
+                    // Apply user zoom
+                    ctx.scale(imgData.scale, imgData.scale);
+                    // Translate back
+                    ctx.translate(-(x + w / 2), -(y + h / 2));
+
+                    // Draw image centered in cell (base position)
+                    ctx.drawImage(img, x + offsetX, y + offsetY, renderW, renderH);
+
+                    ctx.restore();
+                }
+
+                // 4. Download
+                const link = document.createElement('a');
+                link.download = `puzzle-master-${Date.now()}.png`;
+                link.href = canvas.toDataURL('image/png', 1.0);
+                link.click();
+
+            } catch (err) {
+                console.error('Export failed:', err);
+                alert('导出失败，请重试');
+            } finally {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        // Run
+        init();
+    </script>
+</body>
+
+</html>
