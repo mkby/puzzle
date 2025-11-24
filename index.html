@@ -546,7 +546,12 @@
                 ratio: 1,
                 borderWidth: 1,
                 borderColor: '#000000',
-                quality: 0.85 // Added quality state
+                quality: 0.85, // Added quality state
+                isDragging: false,
+                dragCell: null,
+                dragX: 0,
+                dragY: 0,
+                longPressTimer: null
             },
             elements: {},
 
@@ -798,69 +803,122 @@
                 }
             },
 
+            // Note: Ensure `this.state` has `isDragging`, `dragCell`, `dragX`, `dragY`, `longPressTimer` initialized.
             setupImageInteraction(cell, img, imgData) {
-                let isDragging = false, startX, startY, initialX, initialY;
-                let rafId = null;
+                let isPanning = false;
+                let startX, startY;
+                let initialX, initialY;
+                let lastTap = 0;
 
-                const startDrag = (e) => {
-                    e.preventDefault();
-                    isDragging = true;
-                    const clientX = e.type === 'mousedown' ? e.clientX : e.touches[0].clientX;
-                    const clientY = e.type === 'mousedown' ? e.clientY : e.touches[0].clientY;
-                    startX = clientX; startY = clientY;
-                    initialX = imgData.x; initialY = imgData.y;
+                const handleMove = (e) => {
+                    const clientX = e.type.startsWith('touch') ? e.touches[0].clientX : e.clientX;
+                    const clientY = e.type.startsWith('touch') ? e.touches[0].clientY : e.clientY;
 
-                    document.addEventListener('mousemove', onDrag);
-                    document.addEventListener('mouseup', stopDrag);
-                    document.addEventListener('touchmove', onDrag, { passive: false });
-                    document.addEventListener('touchend', stopDrag);
-                    cell.classList.add('cursor-grabbing');
-                };
-
-                const onDrag = (e) => {
-                    if (!isDragging) return;
-                    e.preventDefault();
-
-                    const clientX = e.type === 'mousemove' ? e.clientX : e.touches[0].clientX;
-                    const clientY = e.type === 'mousemove' ? e.clientY : e.touches[0].clientY;
-
-                    // Update data immediately
-                    imgData.x = initialX + (clientX - startX);
-                    imgData.y = initialY + (clientY - startY);
-
-                    // Schedule visual update
-                    if (!rafId) {
-                        rafId = requestAnimationFrame(() => {
-                            img.style.transform = `translate(${imgData.x}px, ${imgData.y}px) scale(${imgData.scale})`;
-                            rafId = null;
-                        });
+                    if (this.state.isDragging) {
+                        e.preventDefault();
+                        this.state.dragX = clientX;
+                        this.state.dragY = clientY;
+                        this.updateGhostImage(clientX, clientY);
+                        return;
                     }
-                };
 
-                const stopDrag = () => {
-                    isDragging = false;
-                    if (rafId) {
-                        cancelAnimationFrame(rafId);
-                        rafId = null;
+                    if (!isPanning) return;
+
+                    // If moved significantly, cancel long press
+                    if (Math.abs(clientX - startX) > 10 || Math.abs(clientY - startY) > 10) {
+                        clearTimeout(this.state.longPressTimer);
                     }
-                    document.removeEventListener('mousemove', onDrag);
-                    document.removeEventListener('mouseup', stopDrag);
-                    document.removeEventListener('touchmove', onDrag);
-                    document.removeEventListener('touchend', stopDrag);
-                    cell.classList.remove('cursor-grabbing');
+
+                    if (e.cancelable) e.preventDefault(); // Prevent scroll while panning
+
+                    const dx = clientX - startX;
+                    const dy = clientY - startY;
+                    imgData.x = initialX + dx;
+                    imgData.y = initialY + dy;
+                    img.style.transform = `translate(${imgData.x}px, ${imgData.y}px) scale(${imgData.scale})`;
                 };
 
-                cell.addEventListener('mousedown', startDrag);
-                cell.addEventListener('touchstart', startDrag, { passive: false });
+                const handleEnd = (e) => {
+                    clearTimeout(this.state.longPressTimer);
+
+                    // Remove global listeners
+                    window.removeEventListener('mousemove', handleMove);
+                    window.removeEventListener('mouseup', handleEnd);
+                    window.removeEventListener('touchmove', handleMove);
+                    window.removeEventListener('touchend', handleEnd);
+
+                    if (this.state.isDragging) {
+                        const clientX = e.type.startsWith('touch') ? e.changedTouches[0].clientX : e.clientX;
+                        const clientY = e.type.startsWith('touch') ? e.changedTouches[0].clientY : e.clientY;
+
+                        this.handleDrop(clientX, clientY);
+                        this.state.isDragging = false;
+                        this.state.dragCell = null;
+                        this.removeGhostImage();
+                        cell.style.opacity = '1';
+                        return;
+                    }
+
+                    isPanning = false;
+
+                    // Double tap reset
+                    const now = Date.now();
+                    if (now - lastTap < 300) {
+                        imgData.x = 0;
+                        imgData.y = 0;
+                        imgData.scale = 1;
+                        img.style.transform = `translate(0px, 0px) scale(1)`;
+                    }
+                    lastTap = now;
+                };
+
+                const handleStart = (clientX, clientY) => {
+                    // Long press detection for drag swap
+                    this.state.longPressTimer = setTimeout(() => {
+                        this.state.isDragging = true;
+                        this.state.dragCell = { cell, img, imgData };
+                        this.state.dragX = clientX;
+                        this.state.dragY = clientY;
+
+                        if (navigator.vibrate) navigator.vibrate(50);
+                        this.createGhostImage(img, clientX, clientY);
+                        cell.style.opacity = '0.5';
+                    }, 500);
+
+                    isPanning = true;
+                    startX = clientX;
+                    startY = clientY;
+                    initialX = imgData.x;
+                    initialY = imgData.y;
+
+                    // Attach global listeners
+                    window.addEventListener('mousemove', handleMove);
+                    window.addEventListener('mouseup', handleEnd);
+                    window.addEventListener('touchmove', handleMove, { passive: false });
+                    window.addEventListener('touchend', handleEnd);
+                };
+
+                // Mouse Events
+                cell.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
+                    handleStart(e.clientX, e.clientY);
+                });
+
+                // Touch Events
+                cell.addEventListener('touchstart', (e) => {
+                    if (e.touches.length === 1) {
+                        e.preventDefault();
+                        handleStart(e.touches[0].clientX, e.touches[0].clientY);
+                    }
+                }, { passive: false });
+
+                // Wheel Zoom
                 cell.addEventListener('wheel', (e) => {
                     e.preventDefault();
                     const delta = e.deltaY > 0 ? 0.9 : 1.1;
-                    imgData.scale = Math.max(0.5, Math.min(imgData.scale * delta, 5));
-
-                    // Use rAF for zoom as well
-                    requestAnimationFrame(() => {
-                        img.style.transform = `translate(${imgData.x}px, ${imgData.y}px) scale(${imgData.scale})`;
-                    });
+                    imgData.scale *= delta;
+                    imgData.scale = Math.max(0.1, Math.min(5, imgData.scale));
+                    img.style.transform = `translate(${imgData.x}px, ${imgData.y}px) scale(${imgData.scale})`;
                 }, { passive: false });
 
                 // Double click to reset
@@ -873,6 +931,61 @@
                         img.style.transform = `translate(0px, 0px) scale(1)`;
                     });
                 });
+            },
+
+            createGhostImage(sourceImg, x, y) {
+                const ghost = sourceImg.cloneNode(true);
+                ghost.id = 'drag-ghost';
+                ghost.style.position = 'fixed';
+                ghost.style.width = `${sourceImg.parentElement.offsetWidth}px`;
+                ghost.style.height = `${sourceImg.parentElement.offsetHeight}px`;
+                ghost.style.left = `${x - sourceImg.parentElement.offsetWidth / 2}px`;
+                ghost.style.top = `${y - sourceImg.parentElement.offsetHeight / 2}px`;
+                ghost.style.zIndex = '9999';
+                ghost.style.pointerEvents = 'none';
+                ghost.style.opacity = '0.8';
+                ghost.style.boxShadow = '0 10px 25px rgba(0,0,0,0.5)';
+                ghost.style.transform = 'scale(1.05)';
+                ghost.style.borderRadius = '8px';
+                ghost.style.backgroundColor = '#fff';
+                document.body.appendChild(ghost);
+            },
+
+            updateGhostImage(x, y) {
+                const ghost = document.getElementById('drag-ghost');
+                if (ghost) {
+                    ghost.style.left = `${x - ghost.offsetWidth / 2}px`;
+                    ghost.style.top = `${y - ghost.offsetHeight / 2}px`;
+                }
+            },
+
+            removeGhostImage() {
+                const ghost = document.getElementById('drag-ghost');
+                if (ghost) ghost.remove();
+            },
+
+            handleDrop(x, y) {
+                const cells = Array.from(this.elements.gridContainer.children);
+                const targetCell = cells.find(cell => {
+                    const rect = cell.getBoundingClientRect();
+                    return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+                });
+
+                if (targetCell && targetCell !== this.state.dragCell.cell) {
+                    const srcIndex = this.state.images.indexOf(this.state.dragCell.imgData);
+                    const targetIndex = cells.indexOf(targetCell);
+
+                    if (srcIndex > -1 && targetIndex > -1) {
+                        const temp = this.state.images[srcIndex];
+                        this.state.images[srcIndex] = this.state.images[targetIndex];
+                        this.state.images[targetIndex] = temp;
+
+                        this.state.images[srcIndex].x = 0; this.state.images[srcIndex].y = 0; this.state.images[srcIndex].scale = 1;
+                        this.state.images[targetIndex].x = 0; this.state.images[targetIndex].y = 0; this.state.images[targetIndex].scale = 1;
+
+                        this.renderGrid();
+                    }
+                }
             },
 
             async exportImage() {
