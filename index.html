@@ -189,8 +189,13 @@
     class="h-full bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-200 flex flex-col md:flex-row overflow-auto md:overflow-hidden font-sans">
 
     <!-- Sidebar -->
-    <aside
-        class="w-full md:w-80 bg-white dark:bg-gray-800 border-b md:border-b-0 md:border-r border-gray-200 dark:border-gray-700 flex flex-col shadow-lg z-10 shrink-0">
+    <aside id="mainSidebar"
+        class="w-full md:w-[360px] bg-white dark:bg-gray-800 border-b md:border-b-0 md:border-r border-gray-200 dark:border-gray-700 flex flex-col shadow-lg z-10 shrink-0 relative group"
+        style="min-width: 280px; max-width: 600px;">
+        <!-- Resize Handle -->
+        <div id="sidebarResizer"
+            class="hidden md:block absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-500 transition-colors z-50 opacity-0 group-hover:opacity-100">
+        </div>
         <!-- Header -->
         <div class="p-6 border-b border-gray-200 dark:border-gray-700">
             <div class="flex justify-between items-center mb-6">
@@ -240,6 +245,11 @@
                     class="tab-btn flex-1 pb-3 text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
                     data-tab="watermark">
                     水印大师
+                </button>
+                <button
+                    class="tab-btn flex-1 pb-3 text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                    data-tab="tag">
+                    标签大师
                 </button>
             </div>
         </div>
@@ -351,7 +361,7 @@
         <div id="frame-sidebar" class="hidden flex-1 overflow-y-auto p-6 space-y-8">
             <!-- Upload -->
             <section>
-                <h2 class="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">照片上传
+                <h2 class="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">图片上传
                 </h2>
                 <div id="frameDropZone"
                     class="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-6 text-center hover:border-blue-500 dark:hover:border-blue-400 transition-colors cursor-pointer bg-gray-50 dark:bg-gray-700/50 relative">
@@ -451,7 +461,7 @@
         <div id="watermark-sidebar" class="hidden flex-1 overflow-y-auto p-6 space-y-8">
             <!-- Image Upload -->
             <section>
-                <h2 class="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">底图上传
+                <h2 class="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">图片上传
                 </h2>
                 <div id="wmDropZone"
                     class="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-6 text-center hover:border-blue-500 dark:hover:border-blue-400 transition-colors cursor-pointer bg-gray-50 dark:bg-gray-700/50">
@@ -463,6 +473,7 @@
                         </path>
                     </svg>
                     <p class="text-sm text-gray-600 dark:text-gray-300">点击或拖拽上传图片</p>
+                    <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">支持图片水印或文字签名</p>
                 </div>
             </section>
 
@@ -616,6 +627,85 @@
                 </div>
             </div>
         </div>
+
+        <!-- Tag Master Sidebar Content -->
+        <div id="tag-sidebar" class="hidden flex-1 overflow-y-auto p-6 space-y-8">
+            <!-- Upload -->
+            <section>
+                <h2 class="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">图片上传
+                </h2>
+                <div id="tagDropZone"
+                    class="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-8 text-center cursor-pointer hover:border-blue-500 dark:hover:border-blue-400 transition-colors bg-gray-50 dark:bg-gray-800/50">
+                    <svg class="w-10 h-10 mx-auto mb-3 text-gray-400" fill="none" stroke="currentColor"
+                        viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z">
+                        </path>
+                    </svg>
+                    <p class="text-sm text-gray-600 dark:text-gray-400">点击或拖拽上传图片</p>
+                    <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">支持 JPG, PNG, WebP</p>
+                </div>
+                <input type="file" id="tagFileInput" accept="image/*" multiple class="hidden">
+            </section>
+
+            <!-- Settings -->
+            <section>
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-semibold text-gray-800 dark:text-gray-100">API设置</h2>
+                    <button id="tagApiSettingsBtn"
+                        class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-600 dark:text-gray-300">
+                        <i class="fa-solid fa-gear"></i>
+                    </button>
+                </div>
+
+                <div class="space-y-4">
+                    <!-- Tag Count -->
+                    <div class="space-y-2">
+                        <div class="flex justify-between">
+                            <label class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">标签数量</label>
+                            <span id="tagCountVal" class="text-xs text-gray-500">15</span>
+                        </div>
+                        <input type="range" id="tagCountRange" min="5" max="30" value="15"
+                            class="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                    </div>
+
+                    <!-- Language -->
+                    <div class="space-y-2">
+                        <label class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">标签语言</label>
+                        <select id="tagLanguage"
+                            class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm focus:ring-2 focus:ring-blue-500 outline-none dark:text-gray-200">
+                            <option value="auto">自动检测</option>
+                            <option value="zh">中文</option>
+                            <option value="en">English</option>
+                        </select>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Generate Button -->
+            <section>
+                <button id="tagGenerateBtn"
+                    class="w-full py-4 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 text-white rounded-xl font-medium shadow-lg shadow-blue-500/30 transition-all transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                    disabled>
+                    <i class="fa-solid fa-wand-magic-sparkles"></i>
+                    <span>生成标签</span>
+                </button>
+            </section>
+
+            <!-- Batch Actions -->
+            <section id="tagResultSection" class="hidden">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-semibold text-gray-800 dark:text-gray-100">批量操作</h2>
+                    <button id="tagCopyAllBtn"
+                        class="px-3 py-1.5 text-xs border border-gray-200 dark:border-gray-600 rounded text-gray-500 dark:text-gray-400 hover:text-blue-500 hover:border-blue-500 transition-colors">
+                        <i class="fa-solid fa-copy"></i> 复制全部结果
+                    </button>
+                </div>
+                <div class="text-sm text-gray-500 dark:text-gray-400">
+                    已生成标签的图片结果将显示在右侧网格中。
+                </div>
+            </section>
+        </div>
     </aside>
 
     <!-- Main Content Area -->
@@ -704,6 +794,99 @@
                 class="hidden shadow-2xl rounded-sm cursor-crosshair max-w-full max-h-full object-contain bg-white relative z-10"></canvas>
         </div>
 
+        <!-- Tag Master Main -->
+        <div id="tag-main" class="hidden w-full h-full flex items-center justify-center relative p-8">
+            <div class="absolute inset-0 pointer-events-none dotted-grid"></div>
+
+            <!-- Empty State -->
+            <div id="tagEmptyState" class="text-center relative z-10">
+                <div
+                    class="w-32 h-32 bg-white dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-6 shadow-sm text-gray-300 dark:text-gray-600">
+                    <svg class="w-16 h-16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect x="3" y="3" width="18" height="18" rx="4" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                        <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" />
+                        <path d="M21 15L16 10L5 21" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                            stroke-linejoin="round" />
+                    </svg>
+                </div>
+                <h3 class="text-2xl font-bold text-gray-700 dark:text-gray-200 mb-2">开始生成标签</h3>
+                <p class="text-gray-500 dark:text-gray-400 text-lg">支持批量上传多张图片</p>
+            </div>
+
+            <!-- Grid Container -->
+            <div id="tagGridContainer" class="hidden w-full h-full overflow-y-auto custom-scrollbar p-8 relative z-20">
+                <div id="tagGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 pb-24">
+                    <!-- Image Cards will be injected here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- API Settings Modal -->
+        <div id="tagApiModal"
+            class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+                <div class="p-6 space-y-6">
+                    <!-- Header -->
+                    <div class="flex justify-between items-center">
+                        <h2 class="text-xl font-bold text-gray-800 dark:text-gray-200">AI API 设置</h2>
+                        <button id="tagApiModalClose"
+                            class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-600 dark:text-gray-300">
+                            <i class="fa-solid fa-xmark text-xl"></i>
+                        </button>
+                    </div>
+
+                    <!-- Form -->
+                    <div class="space-y-4">
+                        <!-- Provider -->
+                        <div class="space-y-2">
+                            <label class="text-sm font-medium text-gray-700 dark:text-gray-300">API 提供商</label>
+                            <select id="tagApiProvider"
+                                class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm focus:ring-2 focus:ring-blue-500 outline-none dark:text-gray-200">
+                                <option value="openai">OpenAI (GPT-4 Vision)</option>
+                                <option value="gemini">Google Gemini</option>
+                                <option value="custom">自定义</option>
+                            </select>
+                        </div>
+
+                        <!-- API Endpoint -->
+                        <div class="space-y-2">
+                            <label class="text-sm font-medium text-gray-700 dark:text-gray-300">API 端点</label>
+                            <input type="text" id="tagApiEndpoint"
+                                placeholder="https://api.openai.com/v1/chat/completions"
+                                class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm focus:ring-2 focus:ring-blue-500 outline-none dark:text-gray-200">
+                        </div>
+
+                        <!-- API Key -->
+                        <div class="space-y-2">
+                            <label class="text-sm font-medium text-gray-700 dark:text-gray-300">API 密钥</label>
+                            <input type="password" id="tagApiKey" placeholder="sk-..."
+                                class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm focus:ring-2 focus:ring-blue-500 outline-none dark:text-gray-200">
+                        </div>
+
+                        <!-- Model Name -->
+                        <div class="space-y-2">
+                            <label class="text-sm font-medium text-gray-700 dark:text-gray-300">模型名称</label>
+                            <input type="text" id="tagModelName" placeholder="gpt-4-vision-preview"
+                                class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm focus:ring-2 focus:ring-blue-500 outline-none dark:text-gray-200">
+                        </div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="flex gap-3">
+                        <button id="tagApiTest"
+                            class="flex-1 py-2.5 border border-gray-200 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                            测试连接
+                        </button>
+                        <button id="tagApiSave"
+                            class="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors">
+                            保存设置
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Toast -->
         <div id="statusMsg"
             class="fixed bottom-10 left-1/2 transform -translate-x-1/2 bg-gray-900/90 backdrop-blur-md text-white px-6 py-3 rounded-full shadow-lg z-50 hidden flex items-center gap-3 transition-all duration-300 translate-y-10 opacity-0">
@@ -727,6 +910,8 @@
             PuzzleApp.init();
             FrameApp.init();
             WatermarkApp.init();
+            TagMasterApp.init();
+            setupSidebarResize();
         }
 
         // --- Theme Logic ---
@@ -769,6 +954,8 @@
             const frameMain = document.getElementById('frame-main');
             const watermarkSidebar = document.getElementById('watermark-sidebar');
             const watermarkMain = document.getElementById('watermark-main');
+            const tagSidebar = document.getElementById('tag-sidebar');
+            const tagMain = document.getElementById('tag-main');
 
             tabs.forEach(tab => {
                 tab.addEventListener('click', () => {
@@ -781,12 +968,15 @@
                     puzzleSidebar.classList.add('hidden');
                     frameSidebar.classList.add('hidden');
                     watermarkSidebar.classList.add('hidden');
+                    tagSidebar.classList.add('hidden');
 
                     puzzleMain.classList.add('hidden');
                     puzzleMain.classList.remove('flex');
                     frameMain.classList.add('hidden');
                     watermarkMain.classList.add('hidden');
                     watermarkMain.classList.remove('flex');
+                    tagMain.classList.add('hidden');
+                    tagMain.classList.remove('flex');
 
                     if (target === 'puzzle') {
                         puzzleSidebar.classList.remove('hidden');
@@ -801,6 +991,10 @@
                         watermarkMain.classList.remove('hidden');
                         watermarkMain.classList.add('flex');
                         WatermarkApp.resizeCanvas();
+                    } else if (target === 'tag') {
+                        tagSidebar.classList.remove('hidden');
+                        tagMain.classList.remove('hidden');
+                        tagMain.classList.add('flex');
                     }
                 });
             });
@@ -2134,6 +2328,616 @@
                 // Optional: CSS max-w-full handles display size, but we could adjust if needed.
             }
         };
+
+        // --- Tag Master Logic ---
+        const TagMasterApp = {
+            state: {
+                imageList: [], // Array of { id, file, processedData, tags, status, error }
+                settings: {
+                    tagCount: 15,
+                    language: 'auto',
+                    apiProvider: 'openai',
+                    apiEndpoint: 'https://api.openai.com/v1/chat/completions',
+                    apiKey: '',
+                    modelName: 'gpt-4-vision-preview'
+                }
+            },
+
+            elements: {},
+
+            init() {
+                this.elements = {
+                    dropZone: document.getElementById('tagDropZone'),
+                    fileInput: document.getElementById('tagFileInput'),
+                    tagCountRange: document.getElementById('tagCountRange'),
+                    tagCountVal: document.getElementById('tagCountVal'),
+                    tagLanguage: document.getElementById('tagLanguage'),
+                    generateBtn: document.getElementById('tagGenerateBtn'),
+                    apiSettingsBtn: document.getElementById('tagApiSettingsBtn'),
+                    emptyState: document.getElementById('tagEmptyState'),
+                    gridContainer: document.getElementById('tagGridContainer'),
+                    grid: document.getElementById('tagGrid'),
+                    tagResultSection: document.getElementById('tagResultSection'),
+                    copyAllBtn: document.getElementById('tagCopyAllBtn'),
+                    // Modal
+                    apiModal: document.getElementById('tagApiModal'),
+                    apiModalClose: document.getElementById('tagApiModalClose'),
+                    apiProvider: document.getElementById('tagApiProvider'),
+                    apiEndpoint: document.getElementById('tagApiEndpoint'),
+                    apiKey: document.getElementById('tagApiKey'),
+                    modelName: document.getElementById('tagModelName'),
+                    apiTest: document.getElementById('tagApiTest'),
+                    apiSave: document.getElementById('tagApiSave')
+                };
+
+                this.loadSettings();
+                this.setupEventListeners();
+            },
+
+            setupEventListeners() {
+                // Upload
+                this.elements.dropZone.addEventListener('click', () => this.elements.fileInput.click());
+                this.elements.dropZone.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    this.elements.dropZone.classList.add('border-blue-500');
+                });
+                this.elements.dropZone.addEventListener('dragleave', () => {
+                    this.elements.dropZone.classList.remove('border-blue-500');
+                });
+                this.elements.dropZone.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    this.elements.dropZone.classList.remove('border-blue-500');
+                    if (e.dataTransfer.files.length > 0) {
+                        this.handleImageUpload(e.dataTransfer.files);
+                    }
+                });
+                this.elements.fileInput.addEventListener('change', (e) => {
+                    if (e.target.files.length > 0) {
+                        this.handleImageUpload(e.target.files);
+                    }
+                });
+
+                // Settings
+                this.elements.tagCountRange.addEventListener('input', (e) => {
+                    this.state.settings.tagCount = parseInt(e.target.value);
+                    this.elements.tagCountVal.textContent = e.target.value;
+                });
+                this.elements.tagLanguage.addEventListener('change', (e) => {
+                    this.state.settings.language = e.target.value;
+                });
+
+                // Generate
+                this.elements.generateBtn.addEventListener('click', () => this.generateTagsBatch());
+
+                // Copy All
+                this.elements.copyAllBtn.addEventListener('click', () => this.copyAllTags());
+
+                // API Settings
+                this.elements.apiSettingsBtn.addEventListener('click', () => this.openApiSettings());
+                this.elements.apiModalClose.addEventListener('click', () => this.closeApiSettings());
+                this.elements.apiModal.addEventListener('click', (e) => {
+                    if (e.target === this.elements.apiModal) this.closeApiSettings();
+                });
+                this.elements.apiProvider.addEventListener('change', (e) => this.updateApiDefaults(e.target.value));
+                this.elements.apiSave.addEventListener('click', () => this.saveApiSettings());
+                this.elements.apiTest.addEventListener('click', () => this.testApiConnection());
+            },
+
+            async handleImageUpload(files) {
+                const newImages = Array.from(files).filter(file => file.type.startsWith('image/'));
+
+                if (newImages.length === 0) {
+                    alert('请上传图片文件');
+                    return;
+                }
+
+                // Process each image
+                for (const file of newImages) {
+                    const id = Date.now().toString(36) + Math.random().toString(36).substr(2);
+
+                    // Add to state immediately with pending status
+                    const imageItem = {
+                        id,
+                        file,
+                        processedData: null,
+                        tags: [],
+                        status: 'loading', // loading image data
+                        error: null
+                    };
+                    this.state.imageList.push(imageItem);
+
+                    // Render immediately
+                    this.renderGrid();
+
+                    try {
+                        // Load and process image
+                        const img = await this.loadImage(file);
+                        const processedData = await this.compressAndStripEXIF(img);
+
+                        // Update state
+                        imageItem.processedData = processedData;
+                        imageItem.status = 'pending'; // ready for AI
+
+                        // Re-render
+                        this.renderGrid();
+                    } catch (error) {
+                        console.error('Image processing error:', error);
+                        imageItem.status = 'error';
+                        imageItem.error = '图片加载失败';
+                        this.renderGrid();
+                    }
+                }
+
+                // Update UI visibility
+                if (this.state.imageList.length > 0) {
+                    this.elements.emptyState.classList.add('hidden');
+                    this.elements.gridContainer.classList.remove('hidden');
+                    this.elements.generateBtn.disabled = false;
+                    this.elements.tagResultSection.classList.remove('hidden');
+                }
+            },
+
+            loadImage(file) {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const img = new Image();
+                        img.onload = () => resolve(img);
+                        img.onerror = reject;
+                        img.src = e.target.result;
+                    };
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                });
+            },
+
+            async compressAndStripEXIF(img) {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+
+                // Compress to max 1024px
+                const MAX_SIZE = 1024;
+                let width = img.width;
+                let height = img.height;
+
+                if (width > MAX_SIZE || height > MAX_SIZE) {
+                    if (width > height) {
+                        height = (height / width) * MAX_SIZE;
+                        width = MAX_SIZE;
+                    } else {
+                        width = (width / height) * MAX_SIZE;
+                        height = MAX_SIZE;
+                    }
+                }
+
+                canvas.width = width;
+                canvas.height = height;
+
+                // Draw image (this strips EXIF data)
+                ctx.drawImage(img, 0, 0, width, height);
+
+                // Convert to base64 with quality 0.85
+                return canvas.toDataURL('image/jpeg', 0.85);
+            },
+
+            renderGrid() {
+                this.elements.grid.innerHTML = '';
+
+                this.state.imageList.forEach(item => {
+                    const card = document.createElement('div');
+                    card.className = 'bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden flex flex-col transition-all hover:shadow-xl';
+
+                    // Image Area
+                    const imgContainer = document.createElement('div');
+                    imgContainer.className = 'relative h-48 bg-gray-100 dark:bg-gray-900 group';
+
+                    if (item.processedData) {
+                        const img = document.createElement('img');
+                        img.src = item.processedData;
+                        img.className = 'w-full h-full object-cover';
+                        imgContainer.appendChild(img);
+                    } else {
+                        // Loading placeholder
+                        imgContainer.innerHTML = '<div class="w-full h-full flex items-center justify-center"><div class="animate-spin rounded-full h-8 w-8 border-2 border-blue-500 border-t-transparent"></div></div>';
+                    }
+
+                    // Remove Button (overlay)
+                    const removeBtn = document.createElement('button');
+                    removeBtn.className = 'absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-all';
+                    removeBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+                    removeBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        this.removeImage(item.id);
+                    };
+                    imgContainer.appendChild(removeBtn);
+
+                    // Status Overlay
+                    if (item.status === 'processing') {
+                        const statusOverlay = document.createElement('div');
+                        statusOverlay.className = 'absolute inset-0 bg-black/50 flex items-center justify-center text-white backdrop-blur-sm';
+                        statusOverlay.innerHTML = '<div class="flex flex-col items-center gap-2"><div class="animate-spin rounded-full h-8 w-8 border-2 border-white border-t-transparent"></div><span class="text-xs">生成中...</span></div>';
+                        imgContainer.appendChild(statusOverlay);
+                    } else if (item.status === 'error') {
+                        const errorOverlay = document.createElement('div');
+                        errorOverlay.className = 'absolute inset-0 bg-red-500/80 flex items-center justify-center text-white backdrop-blur-sm p-4 text-center';
+                        errorOverlay.innerHTML = `<div class="flex flex-col items-center gap-2"><i class="fa-solid fa-triangle-exclamation text-2xl"></i><span class="text-xs">${item.error || '失败'}</span></div>`;
+                        imgContainer.appendChild(errorOverlay);
+                    }
+
+                    // Content Area
+                    const content = document.createElement('div');
+                    content.className = 'p-4 flex-1 flex flex-col gap-3';
+
+                    // Tags Area
+                    const tagsArea = document.createElement('div');
+                    tagsArea.className = 'flex-1 min-h-[60px] flex flex-wrap gap-1.5 content-start';
+
+                    if (item.tags && item.tags.length > 0) {
+                        const colors = [
+                            'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
+                            'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
+                            'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300',
+                            'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-300',
+                            'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300',
+                            'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300'
+                        ];
+
+                        item.tags.forEach((tag, idx) => {
+                            const colorClass = colors[idx % colors.length];
+                            const chip = document.createElement('span');
+                            chip.className = `inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium ${colorClass}`;
+                            chip.innerHTML = `${tag} <button class="hover:text-red-500 ml-0.5" onclick="TagMasterApp.removeTag('${item.id}', ${idx})">×</button>`;
+                            tagsArea.appendChild(chip);
+                        });
+                    } else if (item.status === 'pending') {
+                        tagsArea.innerHTML = '<span class="text-xs text-gray-400 italic">等待生成...</span>';
+                    }
+
+                    // Actions
+                    const actions = document.createElement('div');
+                    actions.className = 'flex justify-between items-center pt-2 border-t border-gray-100 dark:border-gray-700';
+
+                    // Copy Button
+                    const copyBtn = document.createElement('button');
+                    copyBtn.className = 'text-xs text-gray-500 hover:text-blue-500 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed';
+                    copyBtn.innerHTML = '<i class="fa-solid fa-copy"></i> 复制';
+                    copyBtn.disabled = !item.tags || item.tags.length === 0;
+                    copyBtn.onclick = () => this.copyItemTags(item);
+
+                    // Retry Button
+                    const retryBtn = document.createElement('button');
+                    retryBtn.className = 'text-xs text-gray-500 hover:text-blue-500 flex items-center gap-1';
+                    retryBtn.innerHTML = '<i class="fa-solid fa-rotate"></i> 重试';
+                    retryBtn.onclick = () => this.generateSingleTag(item);
+
+                    actions.appendChild(copyBtn);
+                    actions.appendChild(retryBtn);
+
+                    content.appendChild(tagsArea);
+                    content.appendChild(actions);
+
+                    card.appendChild(imgContainer);
+                    card.appendChild(content);
+                    this.elements.grid.appendChild(card);
+                });
+            },
+
+            removeImage(id) {
+                this.state.imageList = this.state.imageList.filter(item => item.id !== id);
+                this.renderGrid();
+
+                if (this.state.imageList.length === 0) {
+                    this.elements.emptyState.classList.remove('hidden');
+                    this.elements.gridContainer.classList.add('hidden');
+                    this.elements.generateBtn.disabled = true;
+                    this.elements.tagResultSection.classList.add('hidden');
+                }
+            },
+
+            removeTag(itemId, tagIndex) {
+                const item = this.state.imageList.find(i => i.id === itemId);
+                if (item) {
+                    item.tags.splice(tagIndex, 1);
+                    this.renderGrid();
+                }
+            },
+
+            copyItemTags(item) {
+                if (!item.tags || item.tags.length === 0) return;
+                const text = item.tags.join(', ');
+                navigator.clipboard.writeText(text).then(() => {
+                    // Optional: toast feedback
+                });
+            },
+
+            async generateTagsBatch() {
+                if (!this.state.settings.apiKey) {
+                    alert('请先配置AI API设置');
+                    this.openApiSettings();
+                    return;
+                }
+
+                const pendingItems = this.state.imageList.filter(item => item.status === 'pending' || item.status === 'error' || item.status === 'done');
+                if (pendingItems.length === 0) {
+                    alert('没有需要处理的图片');
+                    return;
+                }
+
+                this.elements.generateBtn.disabled = true;
+                this.elements.generateBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>生成中...</span>';
+
+                // Process sequentially to avoid rate limits
+                for (const item of pendingItems) {
+                    await this.generateSingleTag(item);
+                }
+
+                this.elements.generateBtn.disabled = false;
+                this.elements.generateBtn.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> <span>生成标签</span>';
+            },
+
+            async generateSingleTag(item) {
+                item.status = 'processing';
+                item.error = null;
+                this.renderGrid();
+
+                try {
+                    const tags = await this.callAIAPI(item.processedData);
+                    item.tags = tags;
+                    item.status = 'done';
+                } catch (error) {
+                    console.error('Tag generation error:', error);
+                    item.status = 'error';
+                    item.error = error.message;
+                }
+                this.renderGrid();
+            },
+
+            async callAIAPI(imageData) {
+                const { apiProvider, apiEndpoint, apiKey, modelName } = this.state.settings;
+                const { tagCount, language } = this.state.settings;
+
+                // Build prompt
+                let langInstruction = '';
+                if (language === 'zh') langInstruction = 'Please respond in Chinese. ';
+                else if (language === 'en') langInstruction = 'Please respond in English. ';
+
+                const prompt = `${langInstruction}Analyze this image and generate exactly ${tagCount} relevant tags or keywords that describe the content, style, mood, colors, objects, and themes. Return ONLY a comma-separated list of tags, nothing else.`;
+
+                let requestBody;
+                if (apiProvider === 'openai') {
+                    requestBody = {
+                        model: modelName,
+                        messages: [
+                            {
+                                role: 'user',
+                                content: [
+                                    { type: 'text', text: prompt },
+                                    { type: 'image_url', image_url: { url: imageData } }
+                                ]
+                            }
+                        ],
+                        max_tokens: 300
+                    };
+                } else if (apiProvider === 'gemini') {
+                    // Gemini format (simplified)
+                    requestBody = {
+                        contents: [{
+                            parts: [
+                                { text: prompt },
+                                { inline_data: { mime_type: 'image/jpeg', data: imageData.split(',')[1] } }
+                            ]
+                        }]
+                    };
+                } else {
+                    // Custom format - assume OpenAI-like
+                    requestBody = {
+                        model: modelName,
+                        messages: [
+                            {
+                                role: 'user',
+                                content: [
+                                    { type: 'text', text: prompt },
+                                    { type: 'image_url', image_url: { url: imageData } }
+                                ]
+                            }
+                        ]
+                    };
+                }
+
+                const response = await fetch(apiEndpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiKey}`
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+                }
+
+                const data = await response.json();
+
+                // Parse response based on provider
+                let tagsText;
+                if (apiProvider === 'openai' || apiProvider === 'custom') {
+                    tagsText = data.choices[0].message.content;
+                } else if (apiProvider === 'gemini') {
+                    tagsText = data.candidates[0].content.parts[0].text;
+                }
+
+                // Parse tags from comma-separated text
+                const tags = tagsText.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0);
+                return tags.slice(0, tagCount); // Ensure we don't exceed requested count
+            },
+
+            copyAllTags() {
+                const itemsWithTags = this.state.imageList.filter(item => item.tags && item.tags.length > 0);
+                if (itemsWithTags.length === 0) {
+                    alert('没有可复制的标签');
+                    return;
+                }
+
+                let text = '';
+                itemsWithTags.forEach((item, index) => {
+                    text += `[图片 ${index + 1}]: ${item.tags.join(', ')}\n`;
+                });
+
+                navigator.clipboard.writeText(text).then(() => {
+                    const btn = this.elements.copyAllBtn;
+                    const originalHtml = btn.innerHTML;
+                    btn.innerHTML = '<i class="fa-solid fa-check"></i> 已复制';
+                    setTimeout(() => {
+                        btn.innerHTML = originalHtml;
+                    }, 2000);
+                });
+            },
+
+            openApiSettings() {
+                // Load current settings to form
+                this.elements.apiProvider.value = this.state.settings.apiProvider;
+                this.elements.apiEndpoint.value = this.state.settings.apiEndpoint;
+                this.elements.apiKey.value = this.state.settings.apiKey;
+                this.elements.modelName.value = this.state.settings.modelName;
+
+                this.elements.apiModal.classList.remove('hidden');
+            },
+
+            closeApiSettings() {
+                this.elements.apiModal.classList.add('hidden');
+            },
+
+            updateApiDefaults(provider) {
+                if (provider === 'openai') {
+                    this.elements.apiEndpoint.value = 'https://api.openai.com/v1/chat/completions';
+                    this.elements.modelName.value = 'gpt-4-vision-preview';
+                } else if (provider === 'gemini') {
+                    this.elements.apiEndpoint.value = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent';
+                    this.elements.modelName.value = 'gemini-pro-vision';
+                }
+            },
+
+            saveApiSettings() {
+                this.state.settings.apiProvider = this.elements.apiProvider.value;
+                this.state.settings.apiEndpoint = this.elements.apiEndpoint.value;
+                this.state.settings.apiKey = this.elements.apiKey.value;
+                this.state.settings.modelName = this.elements.modelName.value;
+
+                // Save to localStorage
+                localStorage.setItem('tagMasterSettings', JSON.stringify(this.state.settings));
+
+                // Visual feedback
+                const saveBtn = this.elements.apiSave;
+                const originalText = saveBtn.innerHTML;
+                saveBtn.innerHTML = '<i class="fa-solid fa-check"></i> 已保存';
+                saveBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+                saveBtn.classList.add('bg-green-600', 'hover:bg-green-700');
+
+                setTimeout(() => {
+                    this.closeApiSettings();
+                    // Reset button style
+                    setTimeout(() => {
+                        saveBtn.innerHTML = originalText;
+                        saveBtn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+                        saveBtn.classList.remove('bg-green-600', 'hover:bg-green-700');
+                    }, 300);
+                }, 800);
+            },
+
+            async testApiConnection() {
+                const testBtn = this.elements.apiTest;
+                const originalText = testBtn.textContent;
+                testBtn.textContent = '测试中...';
+                testBtn.disabled = true;
+
+                try {
+                    // Simple test: just check if endpoint is reachable
+                    const response = await fetch(this.elements.apiEndpoint.value, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${this.elements.apiKey.value}`
+                        },
+                        body: JSON.stringify({ test: true })
+                    });
+
+                    if (response.status === 401) {
+                        alert('API密钥无效');
+                    } else if (response.status === 404) {
+                        alert('API端点不存在');
+                    } else {
+                        alert('连接成功！');
+                    }
+                } catch (error) {
+                    alert('连接失败: ' + error.message);
+                } finally {
+                    testBtn.textContent = originalText;
+                    testBtn.disabled = false;
+                }
+            },
+
+            loadSettings() {
+                const saved = localStorage.getItem('tagMasterSettings');
+                if (saved) {
+                    try {
+                        const settings = JSON.parse(saved);
+                        this.state.settings = { ...this.state.settings, ...settings };
+                    } catch (e) {
+                        console.error('Failed to load settings:', e);
+                    }
+                }
+            }
+        };
+
+        // --- Sidebar Resize Logic ---
+        function setupSidebarResize() {
+            const sidebar = document.getElementById('mainSidebar');
+            const resizer = document.getElementById('sidebarResizer');
+            let isResizing = false;
+
+            // Load saved width
+            const savedWidth = localStorage.getItem('sidebarWidth');
+            if (savedWidth) {
+                sidebar.style.width = `${savedWidth}px`;
+            }
+
+            resizer.addEventListener('mousedown', (e) => {
+                isResizing = true;
+                document.body.style.cursor = 'col-resize';
+                document.body.classList.add('select-none'); // Prevent text selection
+
+                // Add overlay to prevent iframe/canvas interference
+                const overlay = document.createElement('div');
+                overlay.id = 'resizeOverlay';
+                overlay.className = 'fixed inset-0 z-[100] cursor-col-resize';
+                document.body.appendChild(overlay);
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!isResizing) return;
+
+                const newWidth = e.clientX;
+                // Constraints are handled by CSS min-width/max-width, but good to clamp here too
+                if (newWidth >= 280 && newWidth <= 600) {
+                    sidebar.style.width = `${newWidth}px`;
+                }
+            });
+
+            document.addEventListener('mouseup', () => {
+                if (isResizing) {
+                    isResizing = false;
+                    document.body.style.cursor = '';
+                    document.body.classList.remove('select-none');
+
+                    const overlay = document.getElementById('resizeOverlay');
+                    if (overlay) overlay.remove();
+
+                    // Save width
+                    localStorage.setItem('sidebarWidth', sidebar.offsetWidth);
+                }
+            });
+        }
 
         // Run
         init();
