@@ -418,8 +418,43 @@
                 <div id="frameFileList" class="mt-4 grid grid-cols-4 gap-2"></div>
             </section>
 
-            <!-- Parameters -->
+            <!-- Border Type Selection -->
             <section>
+                <h2 class="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
+                    边框类型
+                </h2>
+                <div class="grid grid-cols-2 gap-2">
+                    <button id="frameBorderTypeBlur"
+                        class="border-type-btn active py-2 px-3 text-sm rounded-lg border-2 border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-medium transition-all">
+                        模糊背景
+                    </button>
+                    <button id="frameBorderTypeSolid"
+                        class="border-type-btn py-2 px-3 text-sm rounded-lg border-2 border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-500 transition-all">
+                        纯色边框
+                    </button>
+                </div>
+            </section>
+
+            <!-- Solid Color Picker -->
+            <section id="frameSolidColorSection" class="hidden">
+                <h2 class="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
+                    边框颜色
+                </h2>
+                <div class="flex items-center gap-2">
+                    <div class="relative w-10 h-10">
+                        <input type="color" id="frameBorderColor" value="#000000"
+                            class="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10">
+                        <div id="frameBorderColorPreview"
+                            class="w-full h-full rounded-lg border border-gray-200 shadow-sm transition-colors"
+                            style="background-color: #000000;"></div>
+                    </div>
+                    <input type="text" id="frameBorderColorText" value="#000000"
+                        class="flex-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none uppercase transition-all">
+                </div>
+            </section>
+
+            <!-- Parameters -->
+            <section id="frameParametersSection">
                 <h2 class="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
                     参数调整
                 </h2>
@@ -432,7 +467,7 @@
                         <input type="range" id="frameBorderRange" min="50" max="400" value="120"
                             class="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
                     </div>
-                    <div>
+                    <div id="frameBlurSection">
                         <label class="flex justify-between text-sm text-gray-600 dark:text-gray-300 mb-1">
                             <span>背景模糊</span>
                             <span id="frameBlurVal">20</span>
@@ -2217,7 +2252,9 @@
                 blur: 20,
                 fontScale: 1.0,
                 showExif: true,
-                quality: 0.85 // Added quality setting
+                quality: 0.85,
+                borderType: 'blur', // 'blur' or 'solid'
+                borderColor: '#000000'
             },
             elements: {},
 
@@ -2242,7 +2279,14 @@
                     statusText: document.getElementById('statusText'),
                     spinner: document.getElementById('statusMsg').querySelector('svg'),
                     qualityInput: document.getElementById('frameQuality'),
-                    qualityVal: document.getElementById('frameQualityVal')
+                    qualityVal: document.getElementById('frameQualityVal'),
+                    borderTypeBlur: document.getElementById('frameBorderTypeBlur'),
+                    borderTypeSolid: document.getElementById('frameBorderTypeSolid'),
+                    borderColorInput: document.getElementById('frameBorderColor'),
+                    borderColorPreview: document.getElementById('frameBorderColorPreview'),
+                    borderColorText: document.getElementById('frameBorderColorText'),
+                    solidColorSection: document.getElementById('frameSolidColorSection'),
+                    blurSection: document.getElementById('frameBlurSection')
                 };
                 this.setupEventListeners();
             },
@@ -2267,6 +2311,63 @@
 
                 els.generateBtn.addEventListener('click', () => this.processFiles());
                 els.downloadAllBtn.addEventListener('click', () => this.downloadAll());
+
+                // Border type switching
+                els.borderTypeBlur.addEventListener('click', () => this.switchBorderType('blur'));
+                els.borderTypeSolid.addEventListener('click', () => this.switchBorderType('solid'));
+
+                // Color picker
+                els.borderColorInput.addEventListener('input', (e) => {
+                    const color = e.target.value;
+                    this.settings.borderColor = color;
+                    els.borderColorText.value = color.toUpperCase();
+                    els.borderColorPreview.style.backgroundColor = color;
+                });
+
+                // Color text input
+                els.borderColorText.addEventListener('input', (e) => {
+                    let color = e.target.value;
+                    if (color.match(/^#[0-9A-Fa-f]{6}$/)) {
+                        this.settings.borderColor = color;
+                        els.borderColorInput.value = color;
+                        els.borderColorPreview.style.backgroundColor = color;
+                    }
+                });
+                els.borderColorText.addEventListener('change', (e) => {
+                    let color = e.target.value;
+                    if (!color.startsWith('#')) color = '#' + color;
+                    if (color.match(/^#[0-9A-Fa-f]{6}$/)) {
+                        this.settings.borderColor = color;
+                        els.borderColorInput.value = color;
+                        els.borderColorPreview.style.backgroundColor = color;
+                        e.target.value = color.toUpperCase();
+                    } else {
+                        // Revert to valid color
+                        e.target.value = this.settings.borderColor.toUpperCase();
+                    }
+                });
+            },
+
+            switchBorderType(type) {
+                this.settings.borderType = type;
+                const els = this.elements;
+
+                // Update button states
+                if (type === 'blur') {
+                    els.borderTypeBlur.classList.add('active', 'border-blue-500', 'bg-blue-50', 'dark:bg-blue-900/20', 'text-blue-600', 'dark:text-blue-400');
+                    els.borderTypeBlur.classList.remove('border-gray-200', 'dark:border-gray-600', 'text-gray-600', 'dark:text-gray-400');
+                    els.borderTypeSolid.classList.remove('active', 'border-blue-500', 'bg-blue-50', 'dark:bg-blue-900/20', 'text-blue-600', 'dark:text-blue-400');
+                    els.borderTypeSolid.classList.add('border-gray-200', 'dark:border-gray-600', 'text-gray-600', 'dark:text-gray-400');
+                    els.solidColorSection.classList.add('hidden');
+                    els.blurSection.classList.remove('hidden');
+                } else {
+                    els.borderTypeSolid.classList.add('active', 'border-blue-500', 'bg-blue-50', 'dark:bg-blue-900/20', 'text-blue-600', 'dark:text-blue-400');
+                    els.borderTypeSolid.classList.remove('border-gray-200', 'dark:border-gray-600', 'text-gray-600', 'dark:text-gray-400');
+                    els.borderTypeBlur.classList.remove('active', 'border-blue-500', 'bg-blue-50', 'dark:bg-blue-900/20', 'text-blue-600', 'dark:text-blue-400');
+                    els.borderTypeBlur.classList.add('border-gray-200', 'dark:border-gray-600', 'text-gray-600', 'dark:text-gray-400');
+                    els.solidColorSection.classList.remove('hidden');
+                    els.blurSection.classList.add('hidden');
+                }
             },
 
             handleFiles(files) {
@@ -2336,7 +2437,9 @@
                     blur: parseInt(els.blurRange.value),
                     fontScale: parseFloat(els.fontRange.value),
                     showExif: els.exifToggle.checked,
-                    quality: this.settings.quality // Include quality setting
+                    quality: this.settings.quality,
+                    borderType: this.settings.borderType,
+                    borderColor: this.settings.borderColor
                 };
 
                 for (let i = 0; i < this.currentFiles.length; i++) {
@@ -2420,65 +2523,67 @@
                 canvas.width = canvasWidth;
                 canvas.height = canvasHeight;
 
-                // Background
-                ctx.fillStyle = "#0F172A";
-                ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-
-                // Draw background image for blur
-                ctx.save();
-                // Draw slightly larger to cover edges
-                ctx.drawImage(img, -canvasWidth * 0.05, -canvasHeight * 0.05, canvasWidth * 1.1, canvasHeight * 1.1);
-
-                // Apply Blur (StackBlur)
-                if (settings.blur > 0) {
-                    try {
-                        // Use a fixed small size for blur canvas for performance
-                        const blurCanvas = document.createElement('canvas');
-                        const blurCtx = blurCanvas.getContext('2d');
-
-                        // Limit blur source to max 360px for speed
-                        const blurMaxDim = 360;
-                        let bw = canvasWidth;
-                        let bh = canvasHeight;
-                        const bRatio = bw / bh;
-                        if (bw > blurMaxDim || bh > blurMaxDim) {
-                            if (bw > bh) { bw = blurMaxDim; bh = bw / bRatio; }
-                            else { bh = blurMaxDim; bw = bh * bRatio; }
-                        }
-
-                        blurCanvas.width = bw;
-                        blurCanvas.height = bh;
-
-                        blurCtx.drawImage(img, -bw * 0.05, -bh * 0.05, bw * 1.1, bh * 1.1);
-
-                        // Apply StackBlur to the small canvas
-                        // Radius needs to be adjusted relative to the small canvas
-                        // settings.blur (0-100) -> mapped to reasonable radius for 360px image
-                        // A blur of 100 on 360px is HUGE. 
-                        const radius = Math.round(settings.blur * 0.5);
-
-                        if (radius > 0) {
-                            this.stackBlurCanvasRGB(blurCanvas, 0, 0, blurCanvas.width, blurCanvas.height, radius);
-                        }
-
-                        // Draw blurred image back to main canvas
-                        ctx.drawImage(blurCanvas, 0, 0, blurCanvas.width, blurCanvas.height, 0, 0, canvasWidth, canvasHeight);
-
-                        // Apply brightness darken
-                        ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
-                        ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-
-                    } catch (e) {
-                        console.error("Blur failed", e);
-                        ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
-                        ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-                    }
-                } else {
-                    ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+                // Background - check border type
+                if (settings.borderType === 'solid') {
+                    // Solid color background
+                    ctx.fillStyle = settings.borderColor;
                     ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+                } else {
+                    // Blurred background (original behavior)
+                    ctx.fillStyle = "#0F172A";
+                    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+                    // Draw background image for blur
+                    ctx.save();
+                    // Draw slightly larger to cover edges
+                    ctx.drawImage(img, -canvasWidth * 0.05, -canvasHeight * 0.05, canvasWidth * 1.1, canvasHeight * 1.1);
+
+                    // Apply Blur (StackBlur)
+                    if (settings.blur > 0) {
+                        try {
+                            // Use a fixed small size for blur canvas for performance
+                            const blurCanvas = document.createElement('canvas');
+                            const blurCtx = blurCanvas.getContext('2d');
+
+                            // Limit blur source to max 360px for speed
+                            const blurMaxDim = 360;
+                            let bw = canvasWidth;
+                            let bh = canvasHeight;
+                            const bRatio = bw / bh;
+                            if (bw > blurMaxDim || bh > blurMaxDim) {
+                                if (bw > bh) { bw = blurMaxDim; bh = bw / bRatio; }
+                                else { bh = blurMaxDim; bw = bh * bRatio; }
+                            }
+
+                            blurCanvas.width = bw;
+                            blurCanvas.height = bh;
+
+                            blurCtx.drawImage(img, -bw * 0.05, -bh * 0.05, bw * 1.1, bh * 1.1);
+
+                            // Apply StackBlur to the small canvas
+                            const radius = Math.round(settings.blur * 0.5);
+
+                            if (radius > 0) {
+                                this.stackBlurCanvasRGB(blurCanvas, 0, 0, blurCanvas.width, blurCanvas.height, radius);
+                            }
+
+                            // Clear the background and draw blurred image
+                            ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+                            ctx.fillStyle = "#0F172A";
+                            ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+                            ctx.drawImage(blurCanvas, 0, 0, blurCanvas.width, blurCanvas.height, 0, 0, canvasWidth, canvasHeight);
+
+                            // Apply brightness darken
+                            ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+                            ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+                        } catch (e) {
+                            console.error('Blur failed:', e);
+                        }
+                    }
+
+                    ctx.restore();
                 }
 
-                ctx.restore();
 
                 // Shadow
                 ctx.save();
@@ -2493,7 +2598,12 @@
                 // Text
                 if (settings.showExif && exif.hasData) {
                     ctx.save();
-                    const baseFontSize = 36 * scaleFactor * settings.fontScale;
+                    // Adaptive font size based on border width
+                    // Ensure text fits in padding with margins (approx 3 lines height)
+                    const maxFontSize = realPadding * 0.28;
+                    const defaultFontSize = 36 * scaleFactor;
+                    const baseFontSize = Math.min(defaultFontSize, maxFontSize) * settings.fontScale;
+
                     ctx.fillStyle = "#FFFFFF";
                     ctx.textAlign = "center";
                     ctx.textBaseline = "middle";
@@ -2502,7 +2612,12 @@
                     ctx.shadowOffsetY = 2;
 
                     const centerX = canvasWidth / 2;
-                    const bottomBorderCenterY = canvasHeight - (realPadding / 2);
+
+                    // Adaptive positioning: if border is very thick, keep text closer to image
+                    const maxCenterOffset = 150 * scaleFactor;
+                    const centerOffset = Math.min(realPadding / 2, maxCenterOffset);
+                    const bottomBorderCenterY = canvasHeight - realPadding + centerOffset;
+
                     const lineSpacing = baseFontSize * 1.45;
 
                     ctx.font = `500 ${baseFontSize}px 'Oswald', sans-serif`;
@@ -2577,32 +2692,27 @@
             },
 
             createResultCard(canvas, filename, blob) { // Accept blob
-                const wrapper = document.createElement('div');
-                wrapper.className = "bg-white dark:bg-gray-800 p-2 rounded-xl shadow-md group hover:shadow-lg transition duration-300 flex flex-col gap-2 animate-[fadeIn_0.5s_ease-out]";
+                const container = document.createElement('div');
+                container.className = "bg-gray-100 dark:bg-gray-900 p-3 rounded-xl shadow-md hover:shadow-xl transition-all duration-300 animate-[fadeIn_0.5s_ease-out] h-fit";
 
-                const imgContainer = document.createElement('div');
-                imgContainer.className = "relative overflow-hidden rounded-lg bg-gray-900 aspect-auto";
+                const imgWrapper = document.createElement('div');
+                imgWrapper.className = "relative overflow-hidden rounded-lg group";
 
                 const imgPreview = document.createElement('img');
-                imgPreview.src = canvas.toDataURL('image/jpeg', 0.6);
-                imgPreview.className = "w-full h-auto object-cover";
+                imgPreview.src = canvas.toDataURL('image/jpeg', 0.7);
+                imgPreview.className = "w-full h-auto block";
 
                 const overlay = document.createElement('a');
-                overlay.href = URL.createObjectURL(blob); // Use blob URL
+                overlay.href = URL.createObjectURL(blob);
                 overlay.download = filename;
-                overlay.className = "absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer";
-                overlay.innerHTML = '<div class="bg-white/20 backdrop-blur rounded-full p-2"><svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg></div>';
+                overlay.className = "absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer";
+                overlay.innerHTML = '<div class="bg-white/20 backdrop-blur-sm rounded-full p-4"><svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg></div>';
 
-                imgContainer.appendChild(imgPreview);
-                imgContainer.appendChild(overlay);
+                imgWrapper.appendChild(imgPreview);
+                imgWrapper.appendChild(overlay);
+                container.appendChild(imgWrapper);
 
-                const info = document.createElement('div');
-                info.className = "flex justify-between items-center px-1";
-                info.innerHTML = `<span class="text-gray-500 dark:text-gray-400 text-xs truncate font-mono">${filename}</span>`;
-
-                wrapper.appendChild(imgContainer);
-                wrapper.appendChild(info);
-                this.elements.gallery.appendChild(wrapper);
+                this.elements.gallery.appendChild(container);
             },
 
             async downloadAll() {
