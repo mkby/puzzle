@@ -117,6 +117,8 @@
             will-change: transform;
             user-select: none;
             pointer-events: none;
+            max-width: none !important;
+            max-height: none !important;
         }
 
         /* Ratio Button */
@@ -306,7 +308,18 @@
                 <div id="puzzleFileList" class="mt-4 grid grid-cols-4 gap-2"></div>
             </section>
 
-            <!-- Layout -->
+            <!-- Layout Selector (Hidden by default) -->
+            <section id="puzzleLayoutSection" class="hidden">
+                <h2 class="text-sm font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider mb-3">
+                    选择版式
+                </h2>
+                <div id="layoutSelector" class="grid grid-cols-4 gap-2">
+                    <!-- Dynamic Content -->
+                </div>
+                <div class="border-b border-gray-200 dark:border-slate-800 my-4"></div>
+            </section>
+
+            <!-- Layout Ratio -->
             <section>
                 <h2 class="text-sm font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider mb-3">
                     画布比例
@@ -1695,6 +1708,8 @@
                 dragCell: null,
                 dragX: 0,
                 dragY: 0,
+                currentFiles: [],
+                currentLayoutId: null, // Track selected layout
                 longPressTimer: null
             },
             elements: {},
@@ -1726,7 +1741,25 @@
                 };
                 this.setupEventListeners();
                 this.updateCanvasSize();
-                window.addEventListener('resize', () => this.updateCanvasSize());
+
+                // Add ResizeObserver for responsive image placement
+                if (window.ResizeObserver) {
+                    const resizeObserver = new ResizeObserver(() => {
+                        this.updateCanvasSize();
+                        // Re-calculate placements
+                        const cells = this.elements.gridContainer.querySelectorAll('.grid-cell');
+                        cells.forEach((cell, index) => {
+                            const img = cell.querySelector('img');
+                            const imgData = this.state.images[index];
+                            if (img && imgData) {
+                                this.updateImagePlacement(cell, img, imgData);
+                            }
+                        });
+                    });
+                    resizeObserver.observe(this.elements.gridContainer);
+                } else {
+                    window.addEventListener('resize', () => this.updateCanvasSize());
+                }
             },
 
             setupEventListeners() {
@@ -1867,6 +1900,7 @@
                         });
                         this.renderGrid();
                         this.updateFileList();
+                        this.updateAvailableLayouts(); // Refresh layout options
                     } catch (e) {
                         console.error("Failed to load image", e);
                     }
@@ -1892,6 +1926,7 @@
                 this.state.images.splice(index, 1);
                 this.renderGrid();
                 this.updateFileList();
+                this.updateAvailableLayouts(); // Refresh layout options
             },
 
             renderGrid() {
@@ -1913,7 +1948,7 @@
                 this.elements.puzzleEmptyState.classList.add('hidden');
                 this.elements.canvasContainer.classList.remove('hidden');
 
-                const layout = this.getGridLayout(count);
+                const layout = this.getLayout(count);
                 container.style.gridTemplateColumns = `repeat(${layout.cols}, 1fr)`;
                 container.style.gridTemplateRows = `repeat(${layout.rows}, 1fr)`;
                 container.style.gap = `${this.state.borderWidth}px`;
@@ -1927,33 +1962,211 @@
                         if (layout.spans[index].col) cell.style.gridColumn = `span ${layout.spans[index].col}`;
                         if (layout.spans[index].row) cell.style.gridRow = `span ${layout.spans[index].row}`;
                     }
+
                     const img = document.createElement('img');
                     img.src = imgData.src;
-                    img.className = 'absolute w-full h-full object-cover transition-transform duration-75 ease-out';
-                    img.style.transform = `translate(${imgData.x}px, ${imgData.y}px) scale(${imgData.scale})`;
-                    this.setupImageInteraction(cell, img, imgData);
+                    // Remove object-cover, use absolute positioning
+                    img.className = 'absolute transition-transform duration-75 ease-out origin-center';
+
+                    // We need to wait for cell to have dimensions to place image effectively
+                    // But we can do it after append or use ResizeObserver
                     cell.appendChild(img);
                     container.appendChild(cell);
+
+                    // Initial placement
+                    // We'll trust the ResizeObserver to catch it, but for immediate feeling:
+                    requestAnimationFrame(() => {
+                        this.updateImagePlacement(cell, img, imgData);
+                    });
+
+                    this.setupImageInteraction(cell, img, imgData);
                 });
 
                 this.elements.interactionHint.classList.remove('opacity-0');
                 setTimeout(() => this.elements.interactionHint.classList.add('opacity-0'), 3000);
             },
 
-            getGridLayout(n) {
-                switch (n) {
-                    case 3: return { cols: 2, rows: 2, spans: [{ col: 1, row: 2 }, { col: 1, row: 1 }, { col: 1, row: 1 }] };
-                    case 4: return { cols: 2, rows: 2, spans: [] };
-                    case 5: return { cols: 6, rows: 2, spans: [{ col: 3, row: 1 }, { col: 3, row: 1 }, { col: 2, row: 1 }, { col: 2, row: 1 }, { col: 2, row: 1 }] };
-                    case 6: return { cols: 3, rows: 2, spans: [] };
-                    case 7: return { cols: 12, rows: 2, spans: [{ col: 4, row: 1 }, { col: 4, row: 1 }, { col: 4, row: 1 }, { col: 3, row: 1 }, { col: 3, row: 1 }, { col: 3, row: 1 }, { col: 3, row: 1 }] };
-                    case 8: return { cols: 4, rows: 2, spans: [] };
-                    case 9: return { cols: 3, rows: 3, spans: [] };
-                    case 10: return { cols: 5, rows: 2, spans: [] };
-                    case 11: return { cols: 12, rows: 3, spans: [{ col: 3, row: 1 }, { col: 3, row: 1 }, { col: 3, row: 1 }, { col: 3, row: 1 }, { col: 3, row: 1 }, { col: 3, row: 1 }, { col: 3, row: 1 }, { col: 3, row: 1 }, { col: 4, row: 1 }, { col: 4, row: 1 }, { col: 4, row: 1 }] };
-                    case 12: return { cols: 4, rows: 3, spans: [] };
-                    default: return { cols: n, rows: 1, spans: [] };
+            // New helper to position image like object-fit: cover but manually
+            updateImagePlacement(cell, img, imgData) {
+                const cellRect = cell.getBoundingClientRect();
+                const cellW = cellRect.width;
+                const cellH = cellRect.height;
+
+                if (cellW === 0 || cellH === 0) return;
+
+                const imgW = imgData.originalWidth || img.naturalWidth;
+                const imgH = imgData.originalHeight || img.naturalHeight;
+
+                if (!imgW || !imgH) return; // Image not loaded yet?
+
+                const imgRatio = imgW / imgH;
+                const cellRatio = cellW / cellH;
+
+                let renderW, renderH;
+
+                // Emulate object-fit: cover
+                if (cellRatio > imgRatio) {
+                    // Cell is wider than image aspect -> width matches cell width
+                    renderW = cellW;
+                    renderH = cellW / imgRatio;
+                } else {
+                    // Cell is taller than image aspect -> height matches cell height
+                    renderH = cellH;
+                    renderW = cellH * imgRatio;
                 }
+
+                // Center the image
+                const left = (cellW - renderW) / 2;
+                const top = (cellH - renderH) / 2;
+
+                img.style.width = `${renderW}px`;
+                img.style.height = `${renderH}px`;
+                img.style.left = `${left}px`;
+                img.style.top = `${top}px`;
+
+                // Save base dimensions for interaction
+                imgData.baseW = renderW;
+                imgData.baseH = renderH;
+                imgData.baseLeft = left;
+                imgData.baseTop = top;
+
+                // Apply transform (user pan/zoom)
+                img.style.transform = `translate(${imgData.x}px, ${imgData.y}px) scale(${imgData.scale})`;
+            },
+
+            LAYOUTS: {
+                2: [
+                    { id: '2-v', name: '左右分屏', icon: 'M4 4h7v16H4zm9 0h7v16h-7z', cols: 2, rows: 1, spans: [] },
+                    { id: '2-h', name: '上下分屏', icon: 'M4 4h16v7H4zm0 9h16v7H4z', cols: 1, rows: 2, spans: [] }
+                ],
+                3: [
+                    { id: '3-grid-l', name: '左1右2', icon: 'M4 4h7v16H4zm9 0h7v7h-7zm0 9h7v7h-7z', cols: 2, rows: 2, spans: [{ col: 1, row: 2 }, { col: 1, row: 1 }, { col: 1, row: 1 }] },
+                    { id: '3-grid-r', name: '左2右1', icon: 'M4 4h7v7H4zm0 9h7v7H4zm9-16h7v16h-7z', cols: 2, rows: 2, spans: [{ col: 1, row: 1 }, { col: 1, row: 1 }, { col: 1, row: 2 }] },
+                    { id: '3-v', name: '三列并排', icon: 'M4 4h4.6v16H4zm5.6 0h4.8v16H9.6zm5.8 0h4.6v16h-4.6z', cols: 3, rows: 1, spans: [] },
+                    { id: '3-h', name: '三行并排', icon: 'M4 4h16v4.6H4zm0 5.6h16v4.8H4zm0 5.8h16v4.6H4z', cols: 1, rows: 3, spans: [] },
+                    { id: '3-hero-top', name: '顶部大图', icon: 'M4 4h16v10H4zm0 11h8v5H4zm9 0h7v5h-7z', cols: 2, rows: 2, spans: [{ col: 2, row: 1 }, { col: 1, row: 1 }, { col: 1, row: 1 }] },
+                    { id: '3-hero-bottom', name: '底部大图', icon: 'M4 4h7v5H4zm9 0h7v5h-7zm-9 6h16v10H4z', cols: 2, rows: 2, spans: [{ col: 1, row: 1 }, { col: 1, row: 1 }, { col: 2, row: 1 }] }
+                ],
+                4: [
+                    { id: '4-grid', name: '田字格', icon: 'M4 4h7v7H4zm9 0h7v7h-7zm-9 9h7v7H4zm9 0h7v7h-7z', cols: 2, rows: 2, spans: [] },
+                    { id: '4-v', name: '四列并排', icon: 'M4 4h3v16H4zm4 0h3v16H8zm4 0h3v16h-3zm4 0h3v16h-3z', cols: 4, rows: 1, spans: [] },
+                    { id: '4-h', name: '四行并排', icon: 'M4 4h16v3H4zm0 4h16v3H4zm0 4h16v3H4zm0 4h16v3H4z', cols: 1, rows: 4, spans: [] },
+                    { id: '4-hero-top', name: '顶部大图', icon: 'M4 4h16v8H4zm0 9h5v7H4zm6 0h4v7h-4zm5 0h5v7h-5z', cols: 3, rows: 2, spans: [{ col: 3, row: 1 }, { col: 1, row: 1 }, { col: 1, row: 1 }, { col: 1, row: 1 }] },
+                    { id: '4-hero-left', name: '左侧大图', icon: 'M4 4h8v16H4zm9 0h7v5h-7zm0 6h7v5h-7zm0 6h7v4h-7z', cols: 2, rows: 3, spans: [{ col: 1, row: 3 }, { col: 1, row: 1 }, { col: 1, row: 1 }, { col: 1, row: 1 }] }
+                ],
+                5: [
+                    { id: '5-grid', name: '默认', icon: 'M4 4h7v7H4zm9 0h7v7h-7zm-9 9h4.6v7H4zm5.6 0h4.6v7H9.6zm5.6 0h4.8v7h-4.8z', cols: 6, rows: 2, spans: [{ col: 3, row: 1 }, { col: 3, row: 1 }, { col: 2, row: 1 }, { col: 2, row: 1 }, { col: 2, row: 1 }] },
+                    { id: '5-v', name: '五列并排', icon: 'M4 4h2.4v16H4zm3.4 0h2.4v16H7.4zm3.4 0h2.4v16h-2.4zm3.4 0h2.4v16h-2.4zm3.4 0h2.4v16h-2.4z', cols: 5, rows: 1, spans: [] },
+                    { id: '5-h', name: '五行并排', icon: 'M4 4h16v2.4H4zm0 3.4h16v2.4H4zm0 3.4h16v2.4H4zm0 3.4h16v2.4H4zm0 3.4h16v2.4H4z', cols: 1, rows: 5, spans: [] },
+                    { id: '5-mosaic-l', name: '左侧拼贴', icon: 'M4 4h7v16H4zm8 0h4v8h-4zm4 0h4v8h-4zm-4 8h4v8h-4zm4 0h4v8h-4z', cols: 4, rows: 2, spans: [{ col: 2, row: 2 }, { col: 1, row: 1 }, { col: 1, row: 1 }, { col: 1, row: 1 }, { col: 1, row: 1 }] },
+                    { id: '5-hero-top', name: '顶部大图', icon: 'M4 4h16v8H4zm0 9h3v7H4zm4 0h3v7H8zm4 0h3v7h-3zm4 0h4v7h-4z', cols: 4, rows: 2, spans: [{ col: 4, row: 1 }, { col: 1, row: 1 }, { col: 1, row: 1 }, { col: 1, row: 1 }, { col: 1, row: 1 }] }
+                ],
+                6: [
+                    { id: '6-grid-3x2', name: '3x2', icon: 'M4 4h4.6v7H4zm5.6 0h4.6v7H9.6zm5.8 0h4.6v7h-4.6zm-11.4 9h4.6v7H4zm5.6 0h4.6v7H9.6zm5.8 0h4.6v7h-4.6z', cols: 3, rows: 2, spans: [] },
+                    { id: '6-grid-2x3', name: '2x3', icon: 'M4 4h7v4.6H4zm9 0h7v4.6h-7zm-9 5.6h7v4.6H4zm9 0h7v4.6h-7zm-9 5.8h7v4.6H4zm9 0h7v4.6h-7z', cols: 2, rows: 3, spans: [] },
+                    { id: '6-v', name: '六列并排', icon: 'M4 4h2v16H4zm3 0h2v16H7zm3 0h2v16h-2zm3 0h2v16h-2zm3 0h2v16h-2zm3 0h2v16h-2z', cols: 6, rows: 1, spans: [] },
+                    { id: '6-h', name: '六行并排', icon: 'M4 4h16v2H4zm0 3h16v2H4zm0 3h16v2H4zm0 3h16v2H4zm0 3h16v2H4zm0 3h16v2H4z', cols: 1, rows: 6, spans: [] },
+                    { id: '6-corner', name: '角落焦点', icon: 'M4 4h10v10H4zm11 0h5v5h-5zm0 6h5v5h-5zm-11 5h5v5H4zm6 0h5v5h-5zm6 0h5v5h-5z', cols: 3, rows: 3, spans: [{ col: 2, row: 2 }, { col: 1, row: 1 }, { col: 1, row: 1 }, { col: 1, row: 1 }, { col: 1, row: 1 }, { col: 1, row: 1 }] }
+                ],
+                7: [
+                    { id: '7-grid', name: '默认', icon: 'M4 4h3.5v7H4zm4.5 0h3.5v7H8.5zm4.5 0h3.5v7H13zm-9 9h3v7H4zm4 0h3v7H8zm4 0h3v7h-3zm4 0h3v7h-3z', cols: 12, rows: 2, spans: [{ col: 4, row: 1 }, { col: 4, row: 1 }, { col: 4, row: 1 }, { col: 3, row: 1 }, { col: 3, row: 1 }, { col: 3, row: 1 }, { col: 3, row: 1 }] },
+                    { id: '7-v', name: '七列并排', icon: 'M4 4h1.7v16H4zm2.7 0h1.7v16H6.7zm2.7 0h1.7v16h-1.7zm2.7 0h1.7v16h-1.7zm2.7 0h1.7v16h-1.7zm2.7 0h1.7v16h-1.7zm2.7 0h1.7v16h-1.7z', cols: 7, rows: 1, spans: [] },
+                    { id: '7-h', name: '七行并排', icon: 'M4 4h16v1.7H4zm0 2.7h16v1.7H4zm0 2.7h16v1.7H4zm0 2.7h16v1.7H4zm0 2.7h16v1.7H4zm0 2.7h16v1.7H4zm0 2.7h16v1.7H4z', cols: 1, rows: 7, spans: [] },
+                    { id: '7-hero-top', name: '顶部大图', icon: 'M4 4h16v8H4zm0 9h5v7H4zm5.5 0h5v7h-5zm5.5 0h5v7h-5zm-11 2h5v5-5zm5 0h5 5-5zm5 0h5 5-5z', cols: 3, rows: 3, spans: [{ col: 3, row: 1 }, { col: 1, row: 1 }, { col: 1, row: 1 }, { col: 1, row: 1 }, { col: 1, row: 1 }, { col: 1, row: 1 }, { col: 1, row: 1 }] }
+                ],
+                8: [
+                    { id: '8-grid-4x2', name: '4x2', icon: 'M4 4h3v7H4zm4 0h3v7H8zm4 0h3v7h-3zm4 0h3v7h-3zm-12 9h3v7H4zm4 0h3v7H8zm4 0h3v7h-3zm4 0h3v7h-3z', cols: 4, rows: 2, spans: [] },
+                    { id: '8-grid-2x4', name: '2x4', icon: 'M4 4h7v3H4zm9 0h7v3h-7zm-9 4h7v3H4zm9 0h7v3h-7zm-9 4h7v3H4zm9 0h7v3h-7zm-9 4h7v3H4zm9 0h7v3h-7z', cols: 2, rows: 4, spans: [] },
+                    { id: '8-v', name: '八列并排', icon: 'M4 4h1.5v16H4zm2.5 0h1.5v16H6.5zm2.5 0h1.5v16h-1.5zm2.5 0h1.5v16h-1.5zm2.5 0h1.5v16h-1.5zm2.5 0h1.5v16h-1.5zm2.5 0h1.5v16h-1.5zm2.5 0h1.5v16h-1.5z', cols: 8, rows: 1, spans: [] },
+                    { id: '8-h', name: '八行并排', icon: 'M4 4h16v1.5H4zm0 2.5h16v1.5H4zm0 2.5h16v1.5H4zm0 2.5h16v1.5H4zm0 2.5h16v1.5H4zm0 2.5h16v1.5H4zm0 2.5h16v1.5H4zm0 2.5h16v1.5H4z', cols: 1, rows: 8, spans: [] },
+                    { id: '8-hero-top-2', name: '顶部双图', icon: 'M4 4h8v8H4zm8 0h8v8h-8zm-8 8h2.6v8H4zm2.6 0h2.6v8h-2.6zm2.6 0h2.6v8h-2.6zm2.6 0h2.6v8h-2.6zm2.6 0h2.6v8h-2.6zm2.6 0h2.6v8h-2.6z', cols: 6, rows: 2, spans: [{ col: 3, row: 1 }, { col: 3, row: 1 }, { col: 1, row: 1 }, { col: 1, row: 1 }, { col: 1, row: 1 }, { col: 1, row: 1 }, { col: 1, row: 1 }, { col: 1, row: 1 }] }
+                ],
+                9: [
+                    { id: '9-grid-3x3', name: '3x3', icon: 'M4 4h4.6v4.6H4zm5.6 0h4.6v4.6H9.6zm5.8 0h4.6v4.6h-4.6zm-11.4 5.6h4.6v4.6H4zm5.6 0h4.6v4.6H9.6zm5.8 0h4.6v4.6h-4.6zm-11.4 5.6h4.6v4.6H4zm5.6 0h4.6v4.6H9.6zm5.8 0h4.6v4.6h-4.6z', cols: 3, rows: 3, spans: [] },
+                    { id: '9-v', name: '九列并排', icon: 'M4 4h1.3v16H4zm2.3 0h1.3v16H6.3zm2.3 0h1.3v16h-1.3zm2.3 0h1.3v16h-1.3zm2.3 0h1.3v16h-1.3zm2.3 0h1.3v16h-1.3zm2.3 0h1.3v16h-1.3zm2.3 0h1.3v16h-1.3z', cols: 9, rows: 1, spans: [] },
+                    { id: '9-h', name: '九行并排', icon: 'M4 4h16v1.3H4zm0 2.3h16v1.3H4zm0 2.3h16v1.3H4zm0 2.3h16v1.3H4zm0 2.3h16v1.3H4zm0 2.3h16v1.3H4zm0 2.3h16v1.3H4z', cols: 1, rows: 9, spans: [] },
+                    { id: '9-center', name: '中心大图', icon: 'M4 4h4v4H4zm4 0h8v4H8zm8 0h4v4h-4zm-12 4h4v8H4zm4 0h8v8H8zm8 0h4v8h-4zm-12 8h4v4H4zm4 0h8v4H8zm8 0h4v4h-4z', cols: 4, rows: 4, spans: [{ col: 1, row: 1 }, { col: 2, row: 1 }, { col: 1, row: 1 }, { col: 1, row: 2 }, { col: 2, row: 2 }, { col: 1, row: 2 }, { col: 1, row: 1 }, { col: 2, row: 1 }, { col: 1, row: 1 }] }
+                ],
+                10: [
+                    { id: '10-grid-5x2', name: '5x2', icon: 'M4 4h2.4v7H4zm3.4 0h2.4v7H7.4zm3.4 0h2.4v7h-2.4zm3.4 0h2.4v7h-2.4zm3.4 0h2.4v7h-2.4zm-13.6 9h2.4v7H4zm3.4 0h2.4v7H7.4zm3.4 0h2.4v7h-2.4zm3.4 0h2.4v7h-2.4zm3.4 0h2.4v7h-2.4z', cols: 5, rows: 2, spans: [] },
+                    { id: '10-v', name: '十列并排', icon: 'M4 4h1.2v16H4zm1.2 0h1.2v16h-1.2z', cols: 10, rows: 1, spans: [] },
+                    { id: '10-h', name: '十行并排', icon: 'M4 4h16v1.2H4zm0 1.2h16v1.2H4z', cols: 1, rows: 10, spans: [] }
+                ],
+                11: [
+                    { id: '11-grid', name: '默认', icon: 'M4 4h16v16H4z', cols: 12, rows: 3, spans: [{ col: 3, row: 1 }, { col: 3, row: 1 }, { col: 3, row: 1 }, { col: 3, row: 1 }, { col: 3, row: 1 }, { col: 3, row: 1 }, { col: 3, row: 1 }, { col: 3, row: 1 }, { col: 4, row: 1 }, { col: 4, row: 1 }, { col: 4, row: 1 }] },
+                    { id: '11-v', name: '11列并排', icon: 'M4 4h1v16H4z', cols: 11, rows: 1, spans: [] },
+                    { id: '11-h', name: '11行并排', icon: 'M4 4h16v1H4z', cols: 1, rows: 11, spans: [] }
+                ],
+                12: [
+                    { id: '12-grid-4x3', name: '4x3', icon: 'M4 4h3v4.6H4zm4 0h3v4.6H8zm4 0h3v4.6h-3zm4 0h3v4.6h-3zm-12 5.6h3v4.6H4zm4 0h3v4.6H8zm4 0h3v4.6h-3zm4 0h3v4.6h-3zm-12 5.8h3v4.6H4zm4 0h3v4.6H8zm4 0h3v4.6h-3zm4 0h3v4.6h-3z', cols: 4, rows: 3, spans: [] },
+                    { id: '12-grid-3x4', name: '3x4', icon: 'M4 4h4.6v3H4zm5.6 0h4.6v3H9.6zm5.8 0h4.6v3h-4.6zm-11.4 4h4.6v3H4z', cols: 3, rows: 4, spans: [] },
+                    { id: '12-v', name: '12列并排', icon: 'M4 4h1v16H4z', cols: 12, rows: 1, spans: [] },
+                    { id: '12-h', name: '12行并排', icon: 'M4 4h16v1H4z', cols: 1, rows: 12, spans: [] }
+                ],
+                // Fallback generator for others not explicitly defined
+            },
+
+            getLayout(n) {
+                // Return selected layout from state if valid for n, else default
+                if (this.state.currentLayoutId && this.LAYOUTS[n]) {
+                    const layout = this.LAYOUTS[n].find(l => l.id === this.state.currentLayoutId);
+                    if (layout) return layout;
+                }
+
+                // Default handling
+                if (this.LAYOUTS[n]) return this.LAYOUTS[n][0];
+
+                // Fallback (minimal)
+                return { cols: n, rows: 1, spans: [] };
+            },
+
+            updateAvailableLayouts() {
+                const count = this.state.images.length;
+                const els = this.elements;
+                const section = document.getElementById('puzzleLayoutSection');
+                const container = document.getElementById('layoutSelector');
+
+                if (!section || !container) return; // Safety
+
+                const layouts = this.LAYOUTS[count];
+
+                if (!layouts || layouts.length <= 1) {
+                    section.classList.add('hidden');
+                    return;
+                }
+
+                section.classList.remove('hidden');
+                container.innerHTML = '';
+
+                layouts.forEach(layout => {
+                    const btn = document.createElement('button');
+                    const isActive = (this.state.currentLayoutId === layout.id) || (!this.state.currentLayoutId && layouts[0].id === layout.id);
+
+                    // Allow auto-selection if current is invalid
+                    if (isActive && this.state.currentLayoutId !== layout.id) {
+                        this.state.currentLayoutId = layout.id;
+                    }
+
+                    btn.className = `p-2 rounded-lg border flex flex-col items-center gap-1 transition-all ${isActive
+                        ? 'border-violet-500 bg-violet-50 dark:bg-violet-900/20 text-violet-600 dark:text-violet-400 ring-1 ring-violet-500'
+                        : 'border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-800 text-gray-500'
+                        }`;
+                    btn.title = layout.name;
+                    btn.innerHTML = `
+                        <svg class="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="${layout.icon}" />
+                        </svg>
+                        <span class="text-[10px] whitespace-nowrap">${layout.name}</span>
+                    `;
+
+                    btn.onclick = () => {
+                        this.state.currentLayoutId = layout.id;
+                        this.updateAvailableLayouts(); // Re-render buttons state
+                        this.renderGrid();
+                    };
+
+                    container.appendChild(btn);
+                });
             },
 
             // Note: Ensure `this.state` has `isDragging`, `dragCell`, `dragX`, `dragY`, `longPressTimer` initialized.
@@ -1986,8 +2199,24 @@
 
                     const dx = clientX - startX;
                     const dy = clientY - startY;
+
+                    // Simple translation accumulation
+                    imgData.x = initialX + dx / imgData.scale; // Divide by scale to span consistent UI distance? No, translate is local.
+                    // Wait, css transform translate is applied BEFORE scale or AFTER?
+                    // Standard order: transform: translate() scale() -> translate happens first in local coords? 
+                    // No, transform processing order:
+                    // matrix = ... * translate * scale
+                    // If string is "translate(x, y) scale(s)", translate applies first, then scale.
+                    // So if I move 10px on screen, and scale is 2, I need to translate 5px?
+                    // Actually, let's keep it simple: "translate(tx, ty) scale(s)"
+                    // Visual position = origin + tx + ...
+                    // If we want direct mouse mapping:
+                    // It's easier if we treat x/y as screen pixels offset.
+                    // But scaling happens around center (origin-center).
+
                     imgData.x = initialX + dx;
                     imgData.y = initialY + dy;
+
                     img.style.transform = `translate(${imgData.x}px, ${imgData.y}px) scale(${imgData.scale})`;
                 };
 
@@ -2068,9 +2297,10 @@
                 // Wheel Zoom
                 cell.addEventListener('wheel', (e) => {
                     e.preventDefault();
+                    // Zoom towards mouse? A bit complex for now, keep center zoom
                     const delta = e.deltaY > 0 ? 0.9 : 1.1;
-                    imgData.scale *= delta;
-                    imgData.scale = Math.max(0.1, Math.min(5, imgData.scale));
+                    const newScale = imgData.scale * delta;
+                    imgData.scale = Math.max(0.1, Math.min(10, newScale));
                     img.style.transform = `translate(${imgData.x}px, ${imgData.y}px) scale(${imgData.scale})`;
                 }, { passive: false });
 
@@ -2088,19 +2318,40 @@
 
             createGhostImage(sourceImg, x, y) {
                 const ghost = sourceImg.cloneNode(true);
+                // Reset transform for ghost
+                ghost.style.transform = '';
+                ghost.style.width = sourceImg.style.width; // Keep calculated size
+                ghost.style.height = sourceImg.style.height;
+
                 ghost.id = 'drag-ghost';
                 ghost.style.position = 'fixed';
+                // Center ghost on pointer using its dimensions? 
+                // Or use parent dimensions? 
+                // Let's use parent dimensions for the ghost "card" look
+
+                const w = parseFloat(sourceImg.style.width) || sourceImg.parentElement.offsetWidth;
+                const h = parseFloat(sourceImg.style.height) || sourceImg.parentElement.offsetHeight;
+                // Wait, if image is huge (zoomed in), ghost shouldn't be huge?
+                // Let's make ghost the size of the CELL, with the image inside it?
+                // Or just the image?
+
+                // Existing ghost logic used parentElement size. Let's stick to that for the "tile" feel.
                 ghost.style.width = `${sourceImg.parentElement.offsetWidth}px`;
                 ghost.style.height = `${sourceImg.parentElement.offsetHeight}px`;
+                ghost.style.objectFit = 'cover'; // For ghost we can validly use object-fit if we reset src?
+                // No, sourceImg is an absolute positioned img with specific size.
+                // Better to clone the CELL maybe?
+                // Let's stick to what we had but ensure it looks okay.
+                // If I clone the img which is absolute and large, it will be messy.
+
+                // Simpler: Create a clean ghost image
+                ghost.className = 'fixed z-50 rounded-lg shadow-2xl opacity-80 pointer-events-none bg-white overflow-hidden';
+                ghost.style.width = `${sourceImg.parentElement.offsetWidth}px`;
+                ghost.style.height = `${sourceImg.parentElement.offsetHeight}px`;
+                ghost.style.objectFit = 'cover'; // Force cover for ghost
                 ghost.style.left = `${x - sourceImg.parentElement.offsetWidth / 2}px`;
                 ghost.style.top = `${y - sourceImg.parentElement.offsetHeight / 2}px`;
-                ghost.style.zIndex = '9999';
-                ghost.style.pointerEvents = 'none';
-                ghost.style.opacity = '0.8';
-                ghost.style.boxShadow = '0 10px 25px rgba(0,0,0,0.5)';
-                ghost.style.transform = 'scale(1.05)';
-                ghost.style.borderRadius = '8px';
-                ghost.style.backgroundColor = '#fff';
+
                 document.body.appendChild(ghost);
             },
 
