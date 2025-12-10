@@ -35,14 +35,9 @@ jobs:
           GA_SCRIPT+="\n  gtag('config', '$GA_ID');"
           GA_SCRIPT+="\n</script>"
           
-          # 将代码块存储为环境变量
-          echo "GA_SCRIPT_ESCAPED<<EOF" >> $GITHUB_ENV
-          echo "$GA_SCRIPT" >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
-          
           # 注入操作：将 GA 代码插入到 index.html 的 </head> 标签前
           echo "注入 GA ID: ${{ secrets.GA_MEASUREMENT_ID }}"
-          sed -i '/<\/head>/i\ ${{ env.GA_SCRIPT_ESCAPED }}' index.html
+          sed -i "/<\/head>/i\ ${{ env.GA_SCRIPT }}" index.html
           
       # ----------------------------------------------
       # 3. 官方部署步骤
