@@ -2,8 +2,8 @@ name: Deploy Static Site with GA Injection (Official Method)
 
 on:
   push:
-    branches:
-      - main  # 仍然监控 main 分支的推送
+    tags:
+      - 'v*'  # 仅监控标签推送，例如 v1.0.0
 
 # 赋予 Actions 部署 Pages 的权限
 permissions:
@@ -17,6 +17,21 @@ jobs:
     steps:
       - name: 1. 检出代码
         uses: actions/checkout@v4
+
+      - name: 1.5. 注入版本号
+        run: |
+          # 获取 Tag 和 Commit ID
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            TAG_NAME=${GITHUB_REF#refs/tags/}
+            COMMIT_SHORT=$(git rev-parse --short HEAD)
+            VERSION_STR="${TAG_NAME}-${COMMIT_SHORT}"
+            
+            echo "Injecting version: $VERSION_STR"
+            # 替换 index.html 中的版本号 (使用 sed)
+            sed -i "s/window.APP_VERSION = 'dev';/window.APP_VERSION = '$VERSION_STR';/" index.html
+          else
+            echo "Not a tag push, skipping version injection"
+          fi
 
       - name: 2. 定义 GA 代码块并注入 HTML
         run: |

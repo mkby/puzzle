@@ -19,6 +19,8 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
     <script>
+        window.APP_VERSION = 'dev';
+
         tailwind.config = {
             darkMode: 'class',
             theme: {
@@ -1563,12 +1565,18 @@
         <!-- Toast -->
         <div id="statusMsg"
             class="fixed bottom-10 left-1/2 transform -translate-x-1/2 bg-gray-900/90 backdrop-blur-md text-white px-6 py-3 rounded-full shadow-lg z-50 hidden flex items-center gap-3 transition-all duration-300 translate-y-10 opacity-0">
-            <svg class="animate-spin h-5 w-5 text-blue-500 hidden" xmlns="http://www.w3.org/2000/svg" fill="none"
-                viewBox="0 0 24 24">
+            <!-- Spinner -->
+            <svg id="statusSpinner" class="animate-spin h-5 w-5 text-blue-400 hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
-                </path>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <!-- Check Icon -->
+            <svg id="statusCheck" class="h-5 w-5 text-white hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+            </svg>
+            <!-- Error Icon -->
+            <svg id="statusError" class="h-5 w-5 text-white hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
             </svg>
             <span id="statusText" class="text-sm font-medium tracking-wide" data-i18n="status.processing">处理中...</span>
         </div>
@@ -2407,20 +2415,57 @@
                 }
             },
             Toast: {
-                show(msg, isLoading = true) {
+                timer: null,
+                show(msg, typeOrIsLoading = 'info', duration = 3000) {
                     const el = document.getElementById('statusMsg');
                     const text = document.getElementById('statusText');
-                    const spinner = el.querySelector('svg');
+                    const spinner = document.getElementById('statusSpinner');
+                    const checkIcon = document.getElementById('statusCheck');
+                    const errorIcon = document.getElementById('statusError');
 
-                    el.classList.remove('hidden', 'translate-y-10', 'opacity-0');
+                    // Backward compatibility: map boolean to type
+                    let type = typeOrIsLoading;
+                    if (typeof typeOrIsLoading === 'boolean') {
+                        type = typeOrIsLoading ? 'loading' : 'info';
+                    }
+
+                    // Reset classes to base state
+                    el.className = "fixed bottom-10 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-full shadow-lg z-50 flex items-center gap-3 transition-all duration-300 translate-y-0 opacity-100 backdrop-blur-md";
+                    
+                    // Reset Icons
+                    if (spinner) spinner.classList.add('hidden');
+                    if (checkIcon) checkIcon.classList.add('hidden');
+                    if (errorIcon) errorIcon.classList.add('hidden');
+                    
+                    // Apply Style based on type
+                    if (type === 'loading') {
+                        el.classList.add('bg-gray-900/90', 'text-white');
+                        if (spinner) spinner.classList.remove('hidden');
+                    } else if (type === 'success') {
+                        el.classList.add('bg-green-600/90', 'text-white');
+                        if (checkIcon) checkIcon.classList.remove('hidden');
+                    } else if (type === 'error') {
+                        el.classList.add('bg-red-600/90', 'text-white');
+                        if (errorIcon) errorIcon.classList.remove('hidden');
+                    } else {
+                        // info/default
+                        el.classList.add('bg-gray-900/90', 'text-white');
+                    }
+
                     text.innerText = msg;
-                    if (isLoading) spinner.classList.remove('hidden');
-                    else spinner.classList.add('hidden');
+                    el.classList.remove('hidden', 'translate-y-10', 'opacity-0');
+
+                    // Handle Auto-Hide
+                    if (this.timer) clearTimeout(this.timer);
+                    if (type !== 'loading') {
+                        this.timer = setTimeout(() => this.hide(), duration);
+                    }
                 },
                 hide() {
                     const el = document.getElementById('statusMsg');
+                    if (this.timer) clearTimeout(this.timer);
                     el.classList.add('translate-y-10', 'opacity-0');
-                    setTimeout(() => el.classList.add('hidden'), 500);
+                    setTimeout(() => el.classList.add('hidden'), 300);
                 }
             }
         };
@@ -2753,7 +2798,7 @@
                 if (validFiles.length === 0) return;
 
                 if (this.state.images.length + validFiles.length > 300) {
-                    alert('最多支持300张图片拼接');
+                    Utils.Toast.show('最多支持300张图片拼接', 'info');
                     return;
                 }
 
@@ -3931,7 +3976,7 @@
 
                 } catch (err) {
                     console.error(err);
-                    alert('生成失败，请重试');
+                    Utils.Toast.show('生成失败，请重试', 'error');
                 } finally {
                     btn.innerHTML = originalText;
                     btn.disabled = false;
@@ -4130,7 +4175,7 @@
             },
 
             async processFiles() {
-                if (this.currentFiles.length === 0) { alert("请先上传照片"); return; }
+                if (this.currentFiles.length === 0) { Utils.Toast.show("请先上传照片", 'info'); return; }
 
                 const els = this.elements;
                 els.gallery.innerHTML = '';
@@ -4965,7 +5010,7 @@
                     color: this.elements.sigColor.value
                 };
                 localStorage.setItem('wmSigPreset', JSON.stringify(preset));
-                alert('签名预设已保存');
+                Utils.Toast.show('签名预设已保存', 'success');
             },
 
             loadSignaturePreset() {
@@ -5180,7 +5225,7 @@
                 const newImages = Array.from(files).filter(file => file.type.startsWith('image/'));
 
                 if (newImages.length === 0) {
-                    alert('请上传图片文件');
+                    Utils.Toast.show('请上传图片文件', 'info');
                     return;
                 }
 
@@ -5383,7 +5428,7 @@
 
             async generateTagsBatch() {
                 if (!AISettings.settings.apiKey) {
-                    alert('请先配置AI API设置');
+                    Utils.Toast.show('请先配置AI API设置', 'info');
                     AISettings.openModal();
                     return;
                 }
@@ -5391,7 +5436,7 @@
                 // Filter only pending or error items, skip already done items
                 const pendingItems = this.state.imageList.filter(item => item.status === 'pending' || item.status === 'error');
                 if (pendingItems.length === 0) {
-                    alert('没有需要处理的图片');
+                    Utils.Toast.show('没有需要处理的图片', 'info');
                     return;
                 }
 
@@ -5449,7 +5494,7 @@
             copyAllTags() {
                 const itemsWithTags = this.state.imageList.filter(item => item.tags && item.tags.length > 0);
                 if (itemsWithTags.length === 0) {
-                    alert((appTranslations[currentLang]['tag.no_tags'] || '没有可复制的标签'));
+                    Utils.Toast.show((appTranslations[currentLang]['tag.no_tags'] || '没有可复制的标签'), 'info');
                     return;
                 }
 
@@ -5604,14 +5649,14 @@
                     });
 
                     if (response.status === 401) {
-                        alert('API密钥无效');
+                        Utils.Toast.show('API密钥无效', 'error');
                     } else if (response.status === 404) {
-                        alert('API端点不存在');
+                        Utils.Toast.show('API端点不存在', 'error');
                     } else {
-                        alert('连接成功！');
+                        Utils.Toast.show('连接成功！', 'success');
                     }
                 } catch (error) {
-                    alert('连接失败: ' + error.message);
+                    Utils.Toast.show('连接失败: ' + error.message, 'error');
                 } finally {
                     testBtn.textContent = originalText;
                     testBtn.disabled = false;
@@ -5698,13 +5743,13 @@
                     this.elements.contentDisplay.innerHTML = '<span class="text-gray-400 italic">等待生成...</span>';
                 } catch (e) {
                     console.error('Failed to load image:', e);
-                    alert('图片加载失败');
+                    Utils.Toast.show('图片加载失败', 'error');
                 }
             },
 
             async generateContent() {
                 if (!this.state.imageData || !AISettings.settings.apiKey) {
-                    alert('请先上传图片并配置API设置');
+                    Utils.Toast.show('请先上传图片并配置API设置', 'info');
                     return;
                 }
 
@@ -5772,7 +5817,7 @@
 
                 } catch (error) {
                     console.error('Content generation error:', error);
-                    alert('生成失败: ' + error.message);
+                    Utils.Toast.show('生成失败: ' + error.message, 'error');
                     this.elements.titleDisplay.innerHTML = '<span class="text-red-400">生成失败</span>';
                     this.elements.contentDisplay.innerHTML = '<span class="text-red-400">生成失败</span>';
                 } finally {
@@ -6023,7 +6068,7 @@
                 // Check API settings
                 const { textModelEndpoint, textModelKey, imageGenEndpoint, imageGenKey } = AISettings.settings;
                 if (!textModelKey || !imageGenKey) {
-                    alert('请先在AI API设置中配置文本生成模型和图像生成模型');
+                    Utils.Toast.show('请先在AI API设置中配置文本生成模型和图像生成模型', 'info');
                     AISettings.openModal();
                     return;
                 }
@@ -6049,12 +6094,12 @@
                     this.elements.generateBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
                     this.elements.generateBtn.classList.add('bg-green-600', 'hover:bg-green-700');
                     this.elements.downloadBtn.disabled = false;
-                    Utils.Toast.show('壁纸生成成功！', false);
+                    Utils.Toast.show('壁纸生成成功！', 'success');
                     setTimeout(() => Utils.Toast.hide(), 2000);
 
                 } catch (error) {
                     console.error('Failed to generate wallpaper:', error);
-                    alert('生成壁纸失败: ' + error.message);
+                    Utils.Toast.show('生成壁纸失败: ' + error.message, 'error');
                 } finally {
                     this.state.isGenerating = false;
                     this.hideLoading();
@@ -6273,7 +6318,7 @@ Make the description vivid and artistic. Combine the theme with the modifiers na
                     this.showCanvas();
                 } catch (error) {
                     console.error('Failed to load image:', error);
-                    alert('图片加载失败');
+                    Utils.Toast.show('图片加载失败', 'error');
                 }
             },
 
@@ -6384,7 +6429,7 @@ Make the description vivid and artistic. Combine the theme with the modifiers na
                     // (CORS prevents direct download)
                     const imageUrl = this.elements.previewImage.src;
                     window.open(imageUrl, '_blank');
-                    Utils.Toast.show('图片已在新标签页打开，请右键保存', false);
+                    Utils.Toast.show('图片已在新标签页打开，请右键保存', 'info');
                     setTimeout(() => Utils.Toast.hide(), 3000);
                 } else if (this.state.mode === 'custom' && this.state.customImage) {
                     // Download custom wallpaper from canvas
@@ -6431,6 +6476,20 @@ Make the description vivid and artistic. Combine the theme with the modifiers na
 
         // Run
         init();
+    </script>
+    <!-- Version Footer -->
+    <div id="version-footer" class="fixed bottom-1 right-2 text-[10px] text-gray-500/50 pointer-events-none z-50 font-mono select-none">
+        <span id="app-version"></span>
+    </div>
+
+    <script>
+        // Display Version
+        document.addEventListener('DOMContentLoaded', () => {
+            const versionEl = document.getElementById('app-version');
+            if (versionEl && window.APP_VERSION) {
+                versionEl.textContent = window.APP_VERSION;
+            }
+        });
     </script>
 </body>
 
