@@ -2167,19 +2167,160 @@
 
         // --- Shared Utilities ---
         const Utils = {
-            File: {
-                readImage(file) {
+            debounce(func, wait) {
+                let timeout;
+                return function(...args) {
+                    const context = this;
+                    clearTimeout(timeout);
+                    timeout = setTimeout(() => func.apply(context, args), wait);
+                };
+            },
+            
+            Image: {
+                load(source) {
                     return new Promise((resolve, reject) => {
-                        const reader = new FileReader();
-                        reader.onload = (e) => {
+                        if (source instanceof File || source instanceof Blob) {
+                            const reader = new FileReader();
+                            reader.onload = (e) => {
+                                const img = new Image();
+                                img.onload = () => resolve(img);
+                                img.onerror = reject;
+                                img.src = e.target.result;
+                            };
+                            reader.onerror = reject;
+                            reader.readAsDataURL(source);
+                        } else if (typeof source === 'string') {
                             const img = new Image();
+                            img.crossOrigin = "Anonymous";
                             img.onload = () => resolve(img);
                             img.onerror = reject;
-                            img.src = e.target.result;
-                        };
-                        reader.onerror = reject;
-                        reader.readAsDataURL(file);
+                            img.src = source;
+                        } else {
+                            reject(new Error('Invalid source type'));
+                        }
                     });
+                },
+                resize(img, maxDimension) {
+                    let width = img.width;
+                    let height = img.height;
+                    // Provide option to skip resize if maxDimension is null/0
+                    if (maxDimension && (width > maxDimension || height > maxDimension)) {
+                        const ratio = width / height;
+                        if (width > height) {
+                            width = maxDimension;
+                            height = width / ratio;
+                        } else {
+                            height = maxDimension;
+                            width = height * ratio;
+                        }
+                    }
+                    return { width, height };
+                },
+                compress(img, quality = 0.8, maxDimension = 2048) {
+                    const { width, height } = this.resize(img, maxDimension);
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    return canvas.toDataURL('image/jpeg', quality);
+                }
+            },
+
+            AI: {
+                async call(prompt, imageData, settings, options = {}) {
+                    const { apiProvider, apiEndpoint, apiKey, modelName } = settings;
+                    
+                    let requestBody;
+                    let headers = {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiKey}`
+                    };
+
+                    if (apiProvider === 'openai' || apiProvider === 'custom') {
+                        const messages = [];
+                        if (options.systemPrompt) {
+                            messages.push({ role: 'system', content: options.systemPrompt });
+                        }
+                        
+                        const userContent = [{ type: 'text', text: prompt }];
+                        if (imageData) {
+                            userContent.push({ type: 'image_url', image_url: { url: imageData } });
+                        }
+                        
+                        messages.push({ role: 'user', content: userContent });
+
+                        requestBody = {
+                            model: modelName,
+                            messages: messages,
+                            max_tokens: 1000,
+                            temperature: options.temperature || 0.7
+                        };
+                    } else if (apiProvider === 'gemini') {
+                        // Gemini System Instructions are passed differently (v1beta) 
+                        // but simple prompt concat works often. 
+                        // For formal support, it needs 'system_instruction' field in v1beta/models/...:generateContent
+                        // Stick to simple user prompt concat for now if system prompt exists for Gemini?
+                        // Or just ignore for now as Wallpaper uses Text Model which might be OpenAI.
+                        // Let's prepend system prompt for Gemini text model.
+                        const parts = [];
+                        if (options.systemPrompt) {
+                             parts.push({ text: `System Instruction: ${options.systemPrompt}\n---` });
+                        }
+                        parts.push({ text: prompt });
+                        
+                        if (imageData) {
+                            const base64 = imageData.split(',')[1];
+                            parts.push({ inline_data: { mime_type: 'image/jpeg', data: base64 } });
+                        }
+                        requestBody = {
+                            contents: [{ parts: parts }]
+                        };
+                    }
+
+                    const response = await this.fetchWithRetry(apiEndpoint, {
+                        method: 'POST',
+                        headers: headers,
+                        body: JSON.stringify(requestBody),
+                        signal: options.signal
+                    });
+
+                    const data = await response.json();
+                    return this.parseResponse(data, apiProvider);
+                },
+
+                async fetchWithRetry(url, options, retries = 2, backoff = 1000) {
+                    try {
+                        const res = await fetch(url, options);
+                        if (!res.ok) {
+                            if ((res.status === 429 || res.status >= 500) && retries > 0) {
+                                await new Promise(r => setTimeout(r, backoff));
+                                return this.fetchWithRetry(url, options, retries - 1, backoff * 2);
+                            }
+                            throw new Error(`API Error: ${res.status} ${res.statusText}`);
+                        }
+                        return res;
+                    } catch (err) {
+                        if (retries > 0) {
+                            await new Promise(r => setTimeout(r, backoff));
+                            return this.fetchWithRetry(url, options, retries - 1, backoff * 2);
+                        }
+                        throw err;
+                    }
+                },
+
+                parseResponse(data, provider) {
+                    if (provider === 'gemini') {
+                        return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+                    }
+                    return data.choices?.[0]?.message?.content || '';
+                }
+            },
+ 
+            File: {
+                // Deprecated: Alias to Utils.Image.load for backward compatibility
+                readImage(file) {
+                    return Utils.Image.load(file);
                 }
             },
             UI: {
@@ -2344,41 +2485,37 @@
                 this.updateCanvasSize();
 
                 // Add ResizeObserver for responsive image placement
+                // Add ResizeObserver for responsive image placement
                 if (window.ResizeObserver) {
-                    let resizeTimeout;
-                    const resizeObserver = new ResizeObserver(() => {
-                        // Debounce resize events
-                        if (resizeTimeout) clearTimeout(resizeTimeout);
-                        resizeTimeout = setTimeout(() => {
-                            this.updateCanvasSize();
-                            // Re-calculate placements
-                            const cells = this.elements.gridContainer.querySelectorAll('.grid-cell');
-                            const isYearLayout = this.state.currentLayoutId === 'year-2025';
-    
-                            cells.forEach((cell, i) => {
-                                const img = cell.querySelector('img');
-                                if (!img) return;
-                                
-                                let imgData;
-                                
-                                if (isYearLayout) {
-                                    const id = img.dataset.id;
-                                    if (id) {
-                                        imgData = this.state.images.find(item => String(item.id) === id);
-                                    }
-                                } else {
-                                    imgData = this.state.images[i];
+                    const resizeObserver = new ResizeObserver(Utils.debounce(() => {
+                        this.updateCanvasSize();
+                        // Re-calculate placements
+                        const cells = this.elements.gridContainer.querySelectorAll('.grid-cell');
+                        const isYearLayout = this.state.currentLayoutId === 'year-2025';
+
+                        cells.forEach((cell, i) => {
+                            const img = cell.querySelector('img');
+                            if (!img) return;
+                            
+                            let imgData;
+                            
+                            if (isYearLayout) {
+                                const id = img.dataset.id;
+                                if (id) {
+                                    imgData = this.state.images.find(item => String(item.id) === id);
                                 }
-    
-                                if (imgData) {
-                                    this.updateImagePlacement(cell, img, imgData);
-                                }
-                            });
-                        }, 100); // 100ms debounce
-                    });
+                            } else {
+                                imgData = this.state.images[i];
+                            }
+
+                            if (imgData) {
+                                this.updateImagePlacement(cell, img, imgData);
+                            }
+                        });
+                    }, 100));
                     resizeObserver.observe(this.elements.gridContainer);
                 } else {
-                    window.addEventListener('resize', () => this.updateCanvasSize());
+                    window.addEventListener('resize', Utils.debounce(() => this.updateCanvasSize(), 100));
                 }
             },
 
@@ -2400,19 +2537,22 @@
                     maskInput.addEventListener('change', async (e) => {
                         if (e.target.files.length > 0) {
                             const file = e.target.files[0];
-                            // Optimization: Use createObjectURL instead of FileReader
-                            const src = URL.createObjectURL(file);
-                            const img = new Image();
-                            img.src = src;
-                            await new Promise(r => img.onload = r);
-                            
-                            // Revoke old object URL if exists
-                            if (this.state.yearMaskImage && this.state.yearMaskImage.src.startsWith('blob:')) {
-                                URL.revokeObjectURL(this.state.yearMaskImage.src);
-                            }
+                            // Use Utils.Image.load which handles File/Blob reading (via FileReader standard)
+                            // or we can pass the object URL if we prefer. 
+                            // Let's pass the file directly to use the robust shared implementation.
+                            try {
+                                const img = await Utils.Image.load(file);
+                                
+                                // Revoke old object URL if exists (legacy cleanup)
+                                if (this.state.yearMaskImage && this.state.yearMaskImage.src.startsWith('blob:')) {
+                                    URL.revokeObjectURL(this.state.yearMaskImage.src);
+                                }
 
-                            this.state.yearMaskImage = img;
-                            this.renderGrid();
+                                this.state.yearMaskImage = img;
+                                this.renderGrid();
+                            } catch (e) {
+                                console.error("Failed to load mask", e);
+                            }
                         }
                     });
                 }
@@ -2586,51 +2726,26 @@
 
             // Helper to generate thumbnail
             // Helper to generate thumbnail
-            createThumbnail(file, maxDim = 800, quality = 0.8) {
-                return new Promise((resolve) => {
-                    const reader = new FileReader();
+            async createThumbnail(file, maxDim = 800, quality = 0.8) {
+                try {
+                    const img = await Utils.Image.load(file);
                     
-                    // Optimization: If maxDim is 0, use original (Blob URL)
+                    // Optimization: If maxDim is 0, use original (src from load checks if File/Blob)
+                    // If maxDim is 0, we generally want the original quality.
+                    // Utils.Image.load returns an Image element with src set (blob url or data url).
+                    
                     if (maxDim === 0) {
-                         const url = URL.createObjectURL(file);
-                         const img = new Image();
-                         img.onload = () => resolve({ src: url, originalW: img.naturalWidth, originalH: img.naturalHeight, isBlob: true });
-                         img.onerror = () => resolve(null);
-                         img.src = url;
-                         return;
+                         // Ensure we have a src that persists? invalidating blob urls is handled by caller usually or simple page refresh.
+                         // But here we rely on img.src. 
+                         return { src: img.src, originalW: img.width, originalH: img.height, isBlob: file instanceof File || file instanceof Blob };
                     }
 
-                    reader.onload = (e) => {
-                         const img = new Image();
-                         img.onload = () => {
-                             const canvas = document.createElement('canvas');
-                             let w = img.width;
-                             let h = img.height;
-                             
-                             if (w > maxDim || h > maxDim) {
-                                 if (w > h) {
-                                     h = Math.round((h * maxDim) / w);
-                                     w = maxDim;
-                                 } else {
-                                     w = Math.round((w * maxDim) / h);
-                                     h = maxDim;
-                                 }
-                             }
-                             
-                             canvas.width = w;
-                             canvas.height = h;
-                             const ctx = canvas.getContext('2d');
-                             ctx.drawImage(img, 0, 0, w, h);
-                             
-                             const thumbSrc = canvas.toDataURL('image/jpeg', quality);
-                             resolve({ src: thumbSrc, originalW: img.naturalWidth, originalH: img.naturalHeight });
-                         };
-                         img.onerror = () => resolve(null);
-                         img.src = e.target.result;
-                    };
-                    reader.onerror = () => resolve(null);
-                    reader.readAsDataURL(file);
-                });
+                    const thumbSrc = Utils.Image.compress(img, quality, maxDim);
+                    return { src: thumbSrc, originalW: img.width, originalH: img.height };
+                } catch (e) {
+                    console.error('Thumbnail creation failed:', e);
+                    return null;
+                }
             },
 
             async handleFiles(files) {
@@ -3694,9 +3809,7 @@
                          ctx.clip();
                          
                          if (this.state.yearMaskImage) {
-                             const img = new Image();
-                             img.src = this.state.yearMaskImage.src;
-                             await new Promise(r => img.onload = r);
+                             const img = await Utils.Image.load(this.state.yearMaskImage.src);
                              
                              const { x, y, scale: imgScale } = this.state.yearMaskState;
                              
@@ -3765,8 +3878,7 @@
                         ctx.clip();
 
                         // Load image for draw
-                        const img = new Image();
-                        // Use original high-res file if available, otherwise fallback to src (thumbnail or blob)
+                        // Refator: Use Utils.Image.load
                         let exportSrc = imgData.src;
                         let isBlob = false;
                         
@@ -3775,8 +3887,7 @@
                              isBlob = true;
                         }
                         
-                        img.src = exportSrc;
-                        await new Promise(r => img.onload = r);
+                        const img = await Utils.Image.load(exportSrc);
 
                         // ... transformations ...
                         // (existing transform logic)
@@ -4039,10 +4150,38 @@
                     borderColor: this.settings.borderColor
                 };
 
-                for (let i = 0; i < this.currentFiles.length; i++) {
-                    els.statusText.innerText = `正在处理 ${i + 1}/${this.currentFiles.length} ...`;
-                    await this.processSingleImage(this.currentFiles[i], settings);
-                }
+                const CONCURRENCY = 3;
+                const queue = [...this.currentFiles];
+                let processedCount = 0;
+                
+                const processNext = async () => {
+                    if (queue.length === 0) return;
+                    
+                    const file = queue.shift();
+                    
+                    // Update Status
+                    processedCount++;
+                    els.statusText.innerText = `正在处理... (${processedCount}/${this.currentFiles.length})`;
+                    
+                    try {
+                        await this.processSingleImage(file, settings);
+                    } catch (e) {
+                         console.error("Error processing file", file.name, e);
+                         // Continue despite error
+                    }
+                    
+                    // Recursive next
+                    if (queue.length > 0) {
+                        await processNext();
+                    }
+                };
+
+                // Start concurrent workers
+                const workers = Array(Math.min(CONCURRENCY, this.currentFiles.length))
+                                .fill(null)
+                                .map(() => processNext());
+                                
+                await Promise.all(workers);
 
                 this.showToast("全部完成", false);
                 setTimeout(() => this.hideToast(), 2000);
@@ -4054,7 +4193,7 @@
 
             processSingleImage(file, settings) {
                 return new Promise((resolve) => {
-                    Utils.File.readImage(file).then(img => {
+                    Utils.Image.load(file).then(img => {
                         EXIF.getData(img, () => {
                             const make = EXIF.getTag(img, "Make");
                             const model = EXIF.getTag(img, "Model");
@@ -4073,6 +4212,9 @@
                             };
                             this.createCanvasFrame(img, exifData, settings, file.name, resolve);
                         });
+                    }).catch(err => {
+                        console.error("Failed to load image", err);
+                        resolve(); // Resolve even on error to continue batch
                     });
                 });
             },
@@ -4475,14 +4617,15 @@
                 els.generateHistogramBtn.addEventListener('click', () => this.generateHistogram());
 
                 // Controls
-                Utils.UI.bindRange(els.scaleRange, els.scaleVal, (v) => `${v}%`, (v) => {
+                Utils.UI.bindRange(els.scaleRange, els.scaleVal, (v) => `${v}%`, Utils.debounce((v) => {
                     this.state.watermark.scale = v / 100;
                     this.drawCanvas();
-                });
-                Utils.UI.bindRange(els.opacityRange, els.opacityVal, (v) => `${v}%`, (v) => {
+                }, 50));
+                
+                Utils.UI.bindRange(els.opacityRange, els.opacityVal, (v) => `${v}%`, Utils.debounce((v) => {
                     this.state.watermark.opacity = v / 100;
                     this.drawCanvas();
-                });
+                }, 50));
                 Utils.UI.bindRange(els.qualityRange, els.qualityVal, (v) => `${v}%`);
 
                 // Position
@@ -4539,7 +4682,7 @@
             },
 
             handleFile(file) {
-                Utils.File.readImage(file).then(img => {
+                Utils.Image.load(file).then(img => {
                     this.state.baseImage = img;
                     this.state.canvas.width = img.width;
                     this.state.canvas.height = img.height;
@@ -4563,7 +4706,7 @@
 
             handleWatermarkUpload(e) {
                 if (e.target.files && e.target.files[0]) {
-                    Utils.File.readImage(e.target.files[0]).then(img => {
+                    Utils.Image.load(e.target.files[0]).then(img => {
                         this.setWatermarkImage(img);
                     });
                 }
@@ -4705,9 +4848,7 @@
                     });
                 }
 
-                const img = new Image();
-                img.onload = () => this.setWatermarkImage(img);
-                img.src = pCanvas.toDataURL();
+                Utils.Image.load(pCanvas.toDataURL()).then(img => this.setWatermarkImage(img));
             },
 
             generateHistogram() {
@@ -4783,9 +4924,7 @@
                     drawChannel(bHist, 'rgba(0,0,255,0.6)');
                 }
 
-                const img = new Image();
-                img.onload = () => this.setWatermarkImage(img);
-                img.src = hCanvas.toDataURL();
+                Utils.Image.load(hCanvas.toDataURL()).then(img => this.setWatermarkImage(img));
             },
 
             addSignatureToCanvas() {
@@ -4812,9 +4951,7 @@
                 ctx.textBaseline = 'middle';
                 ctx.fillText(text, 0, height / 2);
 
-                const img = new Image();
-                img.onload = () => this.setWatermarkImage(img);
-                img.src = offCanvas.toDataURL();
+                Utils.Image.load(offCanvas.toDataURL()).then(img => this.setWatermarkImage(img));
             },
 
             updateSignature() {
@@ -5094,36 +5231,12 @@
             },
 
             loadImage(file) {
-                return Utils.File.readImage(file);
+                return Utils.Image.load(file);
             },
 
             async compressAndStripEXIF(img) {
-                const canvas = document.createElement('canvas');
-                const ctx = canvas.getContext('2d');
-
-                // Compress to max 1024px
-                const MAX_SIZE = 1024;
-                let width = img.width;
-                let height = img.height;
-
-                if (width > MAX_SIZE || height > MAX_SIZE) {
-                    if (width > height) {
-                        height = (height / width) * MAX_SIZE;
-                        width = MAX_SIZE;
-                    } else {
-                        width = (width / height) * MAX_SIZE;
-                        height = MAX_SIZE;
-                    }
-                }
-
-                canvas.width = width;
-                canvas.height = height;
-
-                // Draw image (this strips EXIF data)
-                ctx.drawImage(img, 0, 0, width, height);
-
-                // Convert to base64 with quality 0.7
-                return canvas.toDataURL('image/jpeg', 0.7);
+                // Compress to max 1024px with 0.7 quality
+                return Utils.Image.compress(img, 0.7, 1024);
             },
 
             renderGrid() {
@@ -5312,7 +5425,6 @@
             },
 
             async callAIAPI(imageData) {
-                const { apiProvider, apiEndpoint, apiKey, modelName } = AISettings.settings;
                 const { tagCount, language } = this.state.settings;
 
                 // Build prompt
@@ -5322,73 +5434,16 @@
 
                 const prompt = `${langInstruction}Analyze this image and generate exactly ${tagCount} relevant tags or keywords that describe the content, style, mood, colors, objects, and themes. Return ONLY a comma-separated list of tags, nothing else.`;
 
-                let requestBody;
-                if (apiProvider === 'openai') {
-                    requestBody = {
-                        model: modelName,
-                        messages: [
-                            {
-                                role: 'user',
-                                content: [
-                                    { type: 'text', text: prompt },
-                                    { type: 'image_url', image_url: { url: imageData } }
-                                ]
-                            }
-                        ],
-                        max_tokens: 300
-                    };
-                } else if (apiProvider === 'gemini') {
-                    // Gemini format (simplified)
-                    requestBody = {
-                        contents: [{
-                            parts: [
-                                { text: prompt },
-                                { inline_data: { mime_type: 'image/jpeg', data: imageData.split(',')[1] } }
-                            ]
-                        }]
-                    };
-                } else {
-                    // Custom format - assume OpenAI-like
-                    requestBody = {
-                        model: modelName,
-                        messages: [
-                            {
-                                role: 'user',
-                                content: [
-                                    { type: 'text', text: prompt },
-                                    { type: 'image_url', image_url: { url: imageData } }
-                                ]
-                            }
-                        ]
-                    };
+                // Use shared AI Utils
+                try {
+                    const responseText = await Utils.AI.call(prompt, imageData, AISettings.settings);
+                    
+                    // Parse tags from comma-separated text
+                    const tags = responseText.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0);
+                    return tags.slice(0, tagCount); // Ensure we don't exceed requested count
+                } catch (error) {
+                    throw error;
                 }
-
-                const response = await fetch(apiEndpoint, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${apiKey}`
-                    },
-                    body: JSON.stringify(requestBody)
-                });
-
-                if (!response.ok) {
-                    throw new Error(`API request failed: ${response.status} ${response.statusText}`);
-                }
-
-                const data = await response.json();
-
-                // Parse response based on provider
-                let tagsText;
-                if (apiProvider === 'openai' || apiProvider === 'custom') {
-                    tagsText = data.choices[0].message.content;
-                } else if (apiProvider === 'gemini') {
-                    tagsText = data.candidates[0].content.parts[0].text;
-                }
-
-                // Parse tags from comma-separated text
-                const tags = tagsText.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0);
-                return tags.slice(0, tagCount); // Ensure we don't exceed requested count
             },
 
             copyAllTags() {
@@ -5624,30 +5679,11 @@
 
             async handleImageUpload(file) {
                 try {
-                    const img = await Utils.File.readImage(file);
+                    const img = await Utils.Image.load(file);
                     this.state.image = img;
 
-                    // Compress image for API
-                    const canvas = document.createElement('canvas');
-                    const ctx = canvas.getContext('2d');
-                    const MAX_SIZE = 1024;
-                    let width = img.width;
-                    let height = img.height;
-
-                    if (width > MAX_SIZE || height > MAX_SIZE) {
-                        if (width > height) {
-                            height = (height / width) * MAX_SIZE;
-                            width = MAX_SIZE;
-                        } else {
-                            width = (width / height) * MAX_SIZE;
-                            height = MAX_SIZE;
-                        }
-                    }
-
-                    canvas.width = width;
-                    canvas.height = height;
-                    ctx.drawImage(img, 0, 0, width, height);
-                    this.state.imageData = canvas.toDataURL('image/jpeg', 0.7);
+                    // Compress image using shared Utils
+                    this.state.imageData = Utils.Image.compress(img, 0.7, 1024);
 
                     // Update UI
                     this.elements.previewImage.src = this.state.imageData;
@@ -5713,55 +5749,8 @@
 3. 结尾加2-3个相关话题标签
 4. 整体风格符合小红书调性`;
 
-                    const { apiProvider, apiEndpoint, apiKey, modelName } = AISettings.settings;
-
-                    let requestBody;
-                    if (apiProvider === 'openai' || apiProvider === 'custom') {
-                        requestBody = {
-                            model: modelName,
-                            messages: [
-                                {
-                                    role: 'user',
-                                    content: [
-                                        { type: 'text', text: prompt },
-                                        { type: 'image_url', image_url: { url: this.state.imageData } }
-                                    ]
-                                }
-                            ],
-                            max_tokens: 500
-                        };
-                    } else if (apiProvider === 'gemini') {
-                        requestBody = {
-                            contents: [{
-                                parts: [
-                                    { text: prompt },
-                                    { inline_data: { mime_type: 'image/jpeg', data: this.state.imageData.split(',')[1] } }
-                                ]
-                            }]
-                        };
-                    }
-
-                    const response = await fetch(apiEndpoint, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${apiKey}`
-                        },
-                        body: JSON.stringify(requestBody)
-                    });
-
-                    if (!response.ok) {
-                        throw new Error(`API请求失败: ${response.status} ${response.statusText}`);
-                    }
-
-                    const data = await response.json();
-
-                    let resultText;
-                    if (apiProvider === 'openai' || apiProvider === 'custom') {
-                        resultText = data.choices[0].message.content;
-                    } else if (apiProvider === 'gemini') {
-                        resultText = data.candidates[0].content.parts[0].text;
-                    }
+                    // Use shared AI Utils
+                    const resultText = await Utils.AI.call(prompt, this.state.imageData, AISettings.settings);
 
                     // Parse result
                     const titleMatch = resultText.match(/【标题】(.+?)(?=\n|【|$)/);
@@ -6188,28 +6177,23 @@ Requirements:
 
 Make the description vivid and artistic. Combine the theme with the modifiers naturally.`;
 
-                const response = await fetch(textModelEndpoint, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${textModelKey}`
-                    },
-                    body: JSON.stringify({
-                        model: textModelName,
-                        messages: [
-                            { role: 'system', content: systemPrompt },
-                            { role: 'user', content: userPrompt }
-                        ],
-                        temperature: 0.95 // High creativity
-                    })
-                });
+                const textSettings = {
+                    apiProvider: AISettings.settings.apiProvider, // Inherit provider type logic
+                    apiEndpoint: textModelEndpoint,
+                    apiKey: textModelKey,
+                    modelName: AISettings.settings.textModelName
+                };
 
-                if (!response.ok) {
-                    throw new Error(`Text model API error: ${response.status}`);
+                // Use shared AI Utils
+                try {
+                    const responseText = await Utils.AI.call(userPrompt, null, textSettings, { 
+                        systemPrompt: systemPrompt,
+                        temperature: 0.95
+                    });
+                    return responseText.trim();
+                } catch (error) {
+                    throw error;
                 }
-
-                const data = await response.json();
-                return data.choices[0].message.content.trim();
             },
 
             async generateImage(prompt) {
@@ -6265,7 +6249,7 @@ Make the description vivid and artistic. Combine the theme with the modifiers na
 
             async handleCustomImage(file) {
                 try {
-                    const img = await Utils.File.readImage(file);
+                    const img = await Utils.Image.load(file);
                     this.state.customImage = img;
                     this.state.canvasX = 0;
                     this.state.canvasY = 0;
