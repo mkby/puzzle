@@ -309,7 +309,7 @@
                         </path>
                     </svg>
                     <p class="text-sm text-gray-600 dark:text-slate-300" data-i18n="upload.drag">点击或拖拽上传图片</p>
-                    <p class="text-xs text-gray-400 mt-1" data-i18n="upload.sub">支持 3-12 张图片</p>
+                    <p class="text-xs text-gray-400 mt-1" data-i18n="upload.sub">支持 300 张图片</p>
                 </div>
                 <div id="puzzleFileList" class="mt-4 grid grid-cols-4 gap-2"></div>
             </section>
@@ -1607,7 +1607,7 @@
                 "upload.title": "图片上传",
                 "upload.desc": "点击或拖拽上传图片",
                 "upload.drag": "点击或拖拽上传图片",
-                "upload.sub": "支持 3-12 张图片",
+                "upload.sub": "支持最多300张图片",
                 "upload.batch": "支持批量处理",
                 "upload.single": "支持单张图片",
                 "quality.label": "导出质量",
@@ -1809,7 +1809,7 @@
                 "upload.title": "Upload Image",
                 "upload.desc": "Click or drag to upload",
                 "upload.drag": "Click or drag to upload",
-                "upload.sub": "Support 3-12 images",
+                "upload.sub": "Support up to 300 images",
                 "upload.batch": "Batch processing supported",
                 "upload.single": "Single image supported",
                 "quality.label": "Export Quality",
@@ -2584,38 +2584,151 @@
                 this.elements.canvasContainer.style.height = `${h}px`;
             },
 
-            handleFiles(files) {
+            // Helper to generate thumbnail
+            // Helper to generate thumbnail
+            createThumbnail(file, maxDim = 800, quality = 0.8) {
+                return new Promise((resolve) => {
+                    const reader = new FileReader();
+                    
+                    // Optimization: If maxDim is 0, use original (Blob URL)
+                    if (maxDim === 0) {
+                         const url = URL.createObjectURL(file);
+                         const img = new Image();
+                         img.onload = () => resolve({ src: url, originalW: img.naturalWidth, originalH: img.naturalHeight, isBlob: true });
+                         img.onerror = () => resolve(null);
+                         img.src = url;
+                         return;
+                    }
+
+                    reader.onload = (e) => {
+                         const img = new Image();
+                         img.onload = () => {
+                             const canvas = document.createElement('canvas');
+                             let w = img.width;
+                             let h = img.height;
+                             
+                             if (w > maxDim || h > maxDim) {
+                                 if (w > h) {
+                                     h = Math.round((h * maxDim) / w);
+                                     w = maxDim;
+                                 } else {
+                                     w = Math.round((w * maxDim) / h);
+                                     h = maxDim;
+                                 }
+                             }
+                             
+                             canvas.width = w;
+                             canvas.height = h;
+                             const ctx = canvas.getContext('2d');
+                             ctx.drawImage(img, 0, 0, w, h);
+                             
+                             const thumbSrc = canvas.toDataURL('image/jpeg', quality);
+                             resolve({ src: thumbSrc, originalW: img.naturalWidth, originalH: img.naturalHeight });
+                         };
+                         img.onerror = () => resolve(null);
+                         img.src = e.target.result;
+                    };
+                    reader.onerror = () => resolve(null);
+                    reader.readAsDataURL(file);
+                });
+            },
+
+            async handleFiles(files) {
                 const validFiles = Array.from(files).filter(file => file.type.startsWith('image/'));
                 if (validFiles.length === 0) return;
 
-                if (this.state.images.length + validFiles.length > 150) {
-                    alert('最多支持150张图片拼接');
+                if (this.state.images.length + validFiles.length > 300) {
+                    alert('最多支持300张图片拼接');
                     return;
                 }
 
-                validFiles.forEach(async (file) => {
-                    try {
-                        const src = URL.createObjectURL(file);
-                        
-                        const img = new Image();
-                        img.src = src;
-                        await new Promise(r => img.onload = r);
+                const loadingBtn = document.getElementById('puzzleUploadBtn');
+                const originalText = loadingBtn ? loadingBtn.innerHTML : '';
+                if(loadingBtn) {
+                    loadingBtn.innerHTML = '<span class="animate-pulse">0%</span>';
+                    loadingBtn.disabled = true;
+                }
 
-                        this.state.images.push({
-                            id: Date.now() + Math.random(),
-                            file: file, 
-                            src: src, 
-                            x: 0, y: 0, scale: 1,
-                            originalWidth: img.naturalWidth,
-                            originalHeight: img.naturalHeight
-                        });
-                        this.renderGrid();
-                        this.updateFileList();
-                        this.updateAvailableLayouts(); 
-                    } catch (e) {
-                        console.error("Failed to load image", e);
+                // Progressive Loading Strategy
+                const BATCH_SIZE = 12;
+                const fileArray = validFiles;
+                let processedCount = 0;
+
+                // Dynamic Quality Strategy
+                const totalCount = this.state.images.length + validFiles.length;
+                let thumbMaxDim = 800;
+                let thumbQuality = 0.8;
+                
+                if (totalCount <= 6) {
+                    thumbMaxDim = 0; // Original
+                } else if (totalCount <= 20) {
+                    thumbMaxDim = 1600;
+                    thumbQuality = 0.85;
+                } else if (totalCount <= 50) {
+                    thumbMaxDim = 1024;
+                    thumbQuality = 0.8;
+                } else {
+                    thumbMaxDim = 600;
+                    thumbQuality = 0.7;
+                }
+
+                const processNextBatch = async (startIndex) => {
+                    if (startIndex >= fileArray.length) {
+                        // All done
+                        if(loadingBtn) {
+                            loadingBtn.innerHTML = originalText;
+                            loadingBtn.disabled = false;
+                        }
+                        return;
                     }
-                });
+
+                    const batch = fileArray.slice(startIndex, startIndex + BATCH_SIZE);
+                    
+                    try {
+                        // Process current batch
+                        const promises = batch.map(async file => {
+                            const thumbData = await this.createThumbnail(file, thumbMaxDim, thumbQuality);
+                            if (thumbData) {
+                                return {
+                                    id: Date.now() + Math.random(),
+                                    file: file,
+                                    src: thumbData.src,
+                                    x: 0, y: 0, scale: 1,
+                                    originalWidth: thumbData.originalW,
+                                    originalHeight: thumbData.originalH
+                                };
+                            }
+                            return null;
+                        });
+
+                        const results = await Promise.all(promises);
+                        const validResults = results.filter(r => r !== null);
+
+                        if (validResults.length > 0) {
+                            this.state.images.push(...validResults);
+                            // Update UI immediately for this batch
+                            this.renderGrid();
+                            this.updateFileList();
+                            this.updateAvailableLayouts();
+                        }
+                        
+                        processedCount += batch.length;
+                        if(loadingBtn) {
+                            loadingBtn.innerHTML = `<span class="animate-pulse">${Math.round(Math.min(100, (processedCount/fileArray.length)*100))}%</span>`;
+                        }
+
+                    } catch (err) {
+                        console.error("Chunk load error", err);
+                    }
+
+                    // Schedule next batch to let UI breathe
+                    setTimeout(() => {
+                        processNextBatch(startIndex + BATCH_SIZE);
+                    }, 20); 
+                };
+
+                // Start processing
+                processNextBatch(0);
             },
 
             updateFileList() {
@@ -3653,14 +3766,20 @@
 
                         // Load image for draw
                         const img = new Image();
-                        img.src = imgData.src;
+                        // Use original high-res file if available, otherwise fallback to src (thumbnail or blob)
+                        let exportSrc = imgData.src;
+                        let isBlob = false;
+                        
+                        if (imgData.file) {
+                             exportSrc = URL.createObjectURL(imgData.file);
+                             isBlob = true;
+                        }
+                        
+                        img.src = exportSrc;
                         await new Promise(r => img.onload = r);
 
-                        // Calculate transform
-                        // We need to map the DOM transform (translate/scale) to Canvas
-                        // DOM transform is relative to the cell center usually, or top-left?
-                        // Our setupImageInteraction uses translate(x, y) scale(s).
-                        // x, y are pixels relative to initial position.
+                        // ... transformations ...
+                        // (existing transform logic)
 
                         const centerX = x + w / 2;
                         const centerY = y + h / 2;
@@ -3670,12 +3789,7 @@
                         ctx.scale(imgData.scale, imgData.scale);
 
                         // Draw image centered
-                        // We need to figure out the rendered size of the image in the cell
-                        // The img in DOM has object-fit: cover usually? 
-                        // No, in our CSS it's: .grid-cell img { width: 100%; height: 100%; object-fit: cover; }
-                        // So we need to simulate object-fit: cover manually.
-
-                        const imgRatio = img.naturalWidth / img.naturalHeight; // Use natural dimensions for aspect ratio
+                        const imgRatio = img.naturalWidth / img.naturalHeight; 
                         const cellRatio = w / h;
 
                         let renderW, renderH;
@@ -3690,6 +3804,11 @@
                         ctx.drawImage(img, -renderW / 2, -renderH / 2, renderW, renderH);
 
                         ctx.restore();
+                        
+                        // Cleanup blob
+                        if (isBlob) {
+                            URL.revokeObjectURL(exportSrc);
+                        }
                     }
 
                     // Optimization: JPEG dynamic quality
@@ -5051,11 +5170,33 @@
                         imgContainer.appendChild(errorOverlay);
                     }
 
+                    // ... (image container above) ...
+
                     // Content Area
                     const content = document.createElement('div');
                     content.className = 'p-4 flex-1 flex flex-col gap-3';
 
-                    // Tags Area
+                    // Actions (Now at top)
+                    const actions = document.createElement('div');
+                    actions.className = 'flex justify-between items-center pb-2 border-b border-gray-100 dark:border-slate-800 mb-1';
+
+                    // Copy Button
+                    const copyBtn = document.createElement('button');
+                    copyBtn.className = 'text-xs text-gray-500 hover:text-blue-500 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed';
+                    copyBtn.innerHTML = `<i class="fa-solid fa-copy"></i> <span data-i18n="content.btn.copy">${appTranslations[currentLang]['content.btn.copy']}</span>`;
+                    copyBtn.disabled = !item.tags || item.tags.length === 0;
+                    copyBtn.onclick = () => this.copyItemTags(item);
+
+                    // Retry Button
+                    const retryBtn = document.createElement('button');
+                    retryBtn.className = 'text-xs text-gray-500 hover:text-blue-500 flex items-center gap-1';
+                    retryBtn.innerHTML = `<i class="fa-solid fa-rotate"></i> <span data-i18n="btn.retry">${appTranslations[currentLang]['btn.retry']}</span>`;
+                    retryBtn.onclick = () => this.generateSingleTag(item);
+
+                    actions.appendChild(copyBtn);
+                    actions.appendChild(retryBtn);
+
+                    // Tags Area (Now below actions)
                     const tagsArea = document.createElement('div');
                     tagsArea.className = 'flex-1 min-h-[60px] flex flex-wrap gap-1.5 content-start';
 
@@ -5080,28 +5221,9 @@
                         tagsArea.innerHTML = `<span class="text-xs text-gray-400 italic" data-i18n="content.waiting">${appTranslations[currentLang]['content.waiting']}</span>`;
                     }
 
-                    // Actions
-                    const actions = document.createElement('div');
-                    actions.className = 'flex justify-between items-center pt-2 border-t border-gray-100 dark:border-slate-800';
-
-                    // Copy Button
-                    const copyBtn = document.createElement('button');
-                    copyBtn.className = 'text-xs text-gray-500 hover:text-blue-500 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed';
-                    copyBtn.innerHTML = `<i class="fa-solid fa-copy"></i> <span data-i18n="content.btn.copy">${appTranslations[currentLang]['content.btn.copy']}</span>`;
-                    copyBtn.disabled = !item.tags || item.tags.length === 0;
-                    copyBtn.onclick = () => this.copyItemTags(item);
-
-                    // Retry Button
-                    const retryBtn = document.createElement('button');
-                    retryBtn.className = 'text-xs text-gray-500 hover:text-blue-500 flex items-center gap-1';
-                    retryBtn.innerHTML = `<i class="fa-solid fa-rotate"></i> <span data-i18n="btn.retry">${appTranslations[currentLang]['btn.retry']}</span>`;
-                    retryBtn.onclick = () => this.generateSingleTag(item);
-
-                    actions.appendChild(copyBtn);
-                    actions.appendChild(retryBtn);
-
-                    content.appendChild(tagsArea);
-                    content.appendChild(actions);
+                    // Append in new order
+                    content.appendChild(actions); // Actions first
+                    content.appendChild(tagsArea); // Tags second
 
                     card.appendChild(imgContainer);
                     card.appendChild(content);
